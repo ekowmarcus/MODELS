@@ -21,9 +21,6 @@ This is a **Streamlit-powered interactive web app** that helps predict loan defa
 ```
 Loan_Default_Predictor/
 │
-├── 29.07.25.py                  # Main Streamlit app script
-├── encoded_cleaned_data.csv     # Auto-saved after preprocessing
-├── selected_features_data.csv   # Auto-saved after feature selection
 ├── loan_Default.csv             # Raw loan dataset (user-provided)
 ├── README.md                    # Project documentation (this file)
 └── requirements.txt             # Required Python libraries
