@@ -6,7 +6,7 @@ It includes full workflow steps: data upload, preprocessing, feature selection, 
 
 ---
 
-## 📦 How to Run
+##  How to Run
 
 Install required libraries (if needed):
 
@@ -18,7 +18,7 @@ Then run the app:
 
 ---
 
-## 🧩 Features
+##  Features
 
 - Upload any loan dataset with a `Status` column (0 = non-default, 1 = default)
 - Visualize numeric distributions and outliers
@@ -29,14 +29,14 @@ Then run the app:
 
 ---
 
-## 📁 File Structure
+##  File Structure
 
 - Group_5.py — ✅ Entire Streamlit app
 - saved_data/ — Stores intermediate files, models, and outputs
 
 ---
 
-## 📊 Risk Thresholds
+##  Risk Thresholds
 
 - **High Risk**: Probability > 30%
 - **Medium Risk**: 10% – 30%
@@ -44,7 +44,7 @@ Then run the app:
 
 ---
 
-## 👥 Contributors (Group 5)
+##  Contributors (Group 5)
 
 | Name                     | ID        | Role                           |
 |--------------------------|-----------|--------------------------------|
@@ -56,7 +56,7 @@ Then run the app:
 
 ---
 
-## 🌍 Deployment (Demo)
+##  Deployment (Demo)
 
 - [App 1](https://group5-vvhhfpcyg6qkpbswhhtckw.streamlit.app/)
 - [App 2](https://kftalde5ypwd5a3qqejuvo.streamlit.app)
@@ -68,3 +68,4 @@ Then run the app:
 For educational use only. Not suitable for production without validation and compliance.
 
 """
+
