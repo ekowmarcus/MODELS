@@ -114,7 +114,7 @@ def Home_Page():
 
     Use the navigation menu on the left to explore different sections of the application.
     """)
-    st.image("LDI.jpg", use_container_width=True)
+    st.image("LDI.png", use_container_width=True)
 
 
 def Data_Import_and_Overview_page():
@@ -760,4 +760,5 @@ pages = {
 
 selection = st.sidebar.selectbox("Select Page", list(pages.keys()))
 pages[selection]()
+
 
