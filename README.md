@@ -1,128 +1,70 @@
-# 📊 Loan Default Prediction Web App
+"""
+# Loan Default Prediction App (Group 5)
 
-This is a **Streamlit-powered interactive web app** that helps predict loan default risk using machine learning (Ridge Regression). It allows users to explore data, preprocess, select features, train a model, and get predictions with real-time inputs.
-
----
-
-## 🚀 Features
-
-- ✅ Upload and preview loan data  
-- 🧼 Data cleaning & preprocessing  
-- 🧠 Feature selection using best subset (forward stepwise)  
-- 📈 Ridge Regression model training  
-- 📊 Model evaluation (R², RMSE, cross-validation)  
-- 🔍 Interactive prediction form for new applicants  
-- 📋 Final insights with coefficient interpretation  
+This is a **Streamlit-based machine learning app** that predicts the likelihood of loan default.  
+It includes full workflow steps: data upload, preprocessing, feature selection, model training, evaluation, and interactive prediction.
 
 ---
 
-## 📁 Project Structure
+## 📦 How to Run
 
-```
-Loan_Default_Predictor/
-│
-├── FLoan_Default_App.py         # Python File
-├── loan_Default.csv             # Raw loan dataset (user-provided)
-├── README.md                    # Project documentation (this file)
-└── requirements.txt             # Required Python libraries
-```
+Install required libraries (if needed):
 
----
+    pip install streamlit pandas numpy matplotlib seaborn scikit-learn joblib
 
-## 🛠️ Tech Stack
+Then run the app:
 
-- **Frontend**: [Streamlit](https://streamlit.io/)  
-- **ML Model**: Ridge Regression (Scikit-learn)  
-- **Data Handling**: pandas, NumPy  
-- **Visualization**: seaborn, matplotlib  
+    streamlit run Group_5.py
 
 ---
 
-## 🔧 Setup Instructions
+## 🧩 Features
 
-1. **Clone this repo** or download the ZIP:
-   ```bash
-   git clone https://github.com/yourusername/Loan_Default_Predictor.git
-   ```
-
-2. **Navigate to the project folder**:
-   ```bash
-   cd Loan_Default_Predictor
-   ```
-
-3. **Install required packages**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Run the app**:
-   ```bash
-   streamlit run 29.07.25.py
-   ```
+- Upload any loan dataset with a `Status` column (0 = non-default, 1 = default)
+- Visualize numeric distributions and outliers
+- Automatically preprocess missing values, categorical encodings, scaling
+- Use **RandomForestClassifier** for fast, accurate feature selection
+- Train and evaluate Random Forest model (metrics: accuracy, precision, recall, F1)
+- Make interactive predictions and view default risk level
 
 ---
 
-## 📂 Sample Data File: `loan_Default.csv`
+## 📁 File Structure
 
-Your dataset should include:
-- `loan_amount`, `income`, `Credit_Score`, `LTV`
-- `interest_rate_spread`, `upfront_charges`, `dtir1`, etc.
-- Categorical columns like: `loan_type`, `property_type`, `credit_type`
-- **Target column**: `status` (1 = default, 0 = non-default)
+- Group_5.py — ✅ Entire Streamlit app
+- saved_data/ — Stores intermediate files, models, and outputs
 
 ---
 
-## 🤖 Machine Learning Model
+## 📊 Risk Thresholds
 
-We use **Ridge Regression**, ideal for:
-- Handling multicollinearity
-- Reducing overfitting with L2 regularization
-- Handling both numeric and encoded categorical variables
-
----
-
-## 📊 Performance
-
-- **Cross-Validation R²**: ~0.41  
-- **Test Set R²**: ~0.41  
-- **RMSE**: ~0.33  
-> These metrics suggest the model moderately explains the variance in default risk.
+- **High Risk**: Probability > 30%
+- **Medium Risk**: 10% – 30%
+- **Low Risk**: < 10%
 
 ---
 
-## 🔍 Prediction Workflow
+## 👥 Contributors (Group 5)
 
-- Input your loan features via form
-- Model predicts probability of default
-- Output shows predicted risk + classification (Default or Not)
-
----
-
-## 👥 Group 5 – Developers
-
-**Interactive Loan Default Prediction Web App**  
-- Kingsley Sarfo – 22252461  
-- Francisca Manu Sarpong – 22255796  
-- George Owell – 22256146  
-- Barima Owiredu Addo – 22254055  
-- Akrobettoe Marcus – 11410687  
+| Name                     | ID        | Role                           |
+|--------------------------|-----------|--------------------------------|
+| Kingsley Sarfo           | 22252461  | Preprocessing, Coordination    |
+| Francisca Manu Sarpong   | 22255796  | Documentation, Deployment      |
+| George Owell             | 22256146  | Model Evaluation               |
+| Barima Owiredu Addo      | 22254055  | UI, Prediction Interface       |
+| Akrobettoe Marcus        | 11410687  | Feature Selection & Training   |
 
 ---
 
-## 📄 License
+## 🌍 Deployment (Demo)
 
-This project is released under the MIT License. Free to use for learning or academic purposes.
+- [App 1](https://group5-vvhhfpcyg6qkpbswhhtckw.streamlit.app/)
+- [App 2](https://kftalde5ypwd5a3qqejuvo.streamlit.app)
 
 ---
 
-## 📦 requirements.txt (Paste into file)
+## 📌 License
 
-```
-streamlit==1.35.0
-pandas
-numpy
-scikit-learn
-matplotlib
-seaborn
-Pillow
-```
+For educational use only. Not suitable for production without validation and compliance.
+
+"""
