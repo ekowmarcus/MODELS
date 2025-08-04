@@ -36,7 +36,7 @@ This Streamlit application is an interactive Machine Learning (ML) platform for 
 │   ├── 7_trained_model.pkl
 │   └── 8_predictions.csv
 ├── Loan_Default.csv
-├── Another1.py (Main Streamlit App)
+├── Group 5.py (Main Streamlit App)
 ├── requirements.txt
 └── README.md
 ```
@@ -107,3 +107,4 @@ http://localhost:8501
 ## License
 
 This project is licensed under the MIT License.
+
