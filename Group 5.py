@@ -363,17 +363,21 @@ def Data_Preprocessing_page():
     st.title("2. Data Preprocessing")
     st.title("Data Preprocessing")
 
-    if os.path.exists(file_path):
+    try:
         processed_df = pd.read_csv(file_path)
         st.dataframe(processed_df.head())
-    else:
+        st.success(f"✅ Successfully loaded data from: {file_path}")
+    except FileNotFoundError:
         st.error(f"🚨 File not found at: {file_path}")
         st.info(f"Current working directory: {os.getcwd()}")
-        st.info(f"Contents of current directory: {os.listdir()}")
-        if os.path.exists(DATA_DIR):
-            st.info(f"Contents of '{DATA_DIR}' directory: {os.listdir(DATA_DIR)}")
+        st.info(f"Current directory contents: {os.listdir(os.getcwd())}")
+        parent_dir = os.path.join(os.getcwd(), "..")
+        st.info(f"Parent directory contents: {os.listdir(parent_dir)}")
+        saved_data_dir = os.path.join(parent_dir, "saved_data")
+        if os.path.exists(saved_data_dir):
+            st.info(f"'saved_data' directory contents: {os.listdir(saved_data_dir)}")
         else:
-            st.error(f"'{DATA_DIR}' directory not found!")
+            st.error(f"'saved_data' directory not found at expected location: {saved_data_dir}")
 
     if st.button("Run Data Preprocessing"):
         processed_df = pd.read_csv(f"{DATA_DIR}/4_processed_data.csv")
