@@ -102,7 +102,7 @@ def Home_Page():
     """Render the home page with project overview and team information."""
 
     # LOGO
-    logo = Image.open("LDP.jpg")
+    logo = Image.open("LDP.jpeg")
 
     st.image(logo, caption="", width=300)
     st.title("Loan Default Prediction Web App")
@@ -695,3 +695,4 @@ pages = {
 
 selection = st.sidebar.selectbox("Select Page", list(pages.keys()))
 pages[selection]()
+
