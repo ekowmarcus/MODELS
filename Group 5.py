@@ -361,6 +361,20 @@ def Data_Preprocessing_page():
             - Displays sample processed data"""
 
     st.title("2. Data Preprocessing")
+    st.title("Data Preprocessing")
+
+    if os.path.exists(file_path):
+        processed_df = pd.read_csv(file_path)
+        st.dataframe(processed_df.head())
+    else:
+        st.error(f"🚨 File not found at: {file_path}")
+        st.info(f"Current working directory: {os.getcwd()}")
+        st.info(f"Contents of current directory: {os.listdir()}")
+        if os.path.exists(DATA_DIR):
+            st.info(f"Contents of '{DATA_DIR}' directory: {os.listdir(DATA_DIR)}")
+        else:
+            st.error(f"'{DATA_DIR}' directory not found!")
+
     if st.button("Run Data Preprocessing"):
         processed_df = pd.read_csv(f"{DATA_DIR}/4_processed_data.csv")
         st.subheader("Processed Data Sample")
@@ -695,4 +709,3 @@ pages = {
 
 selection = st.sidebar.selectbox("Select Page", list(pages.keys()))
 pages[selection]()
-
