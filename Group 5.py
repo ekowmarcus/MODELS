@@ -355,6 +355,7 @@ def Data_Import_and_Overview_page():
 
         st.pyplot(fig)
 
+file_path = "saved_data/4_processed_data.csv"
 def Data_Preprocessing_page():
     """Manages the data preprocessing workflow:
             - Executes the preprocessing pipeline
