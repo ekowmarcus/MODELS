@@ -1,951 +1,687 @@
-# Core libraries for data processing and visualization
-import streamlit as st  # Web application framework
-import pandas as pd  # Data manipulation
-import numpy as np  # Numerical operations
-from matplotlib import pyplot as plt  # Visualization
-import seaborn as sns  # Enhanced visualization
-import pickle  # Object serialization
-import os  # File system operations
-from PIL import Image  # Image support (for adding logos or visuals)
+# --- IMPORT SECTION ---
+# Standard data science and visualization libraries
+import streamlit as st  # For building the web interface
+import pandas as pd  # For data manipulation
+import numpy as np  # For numerical operations
+import matplotlib.pyplot as plt  # For plotting
+import seaborn as sns  # For enhanced visualizations
+import pickle  # For serializing Python objects
+import os  # For file system operations
+from PIL import Image  # For image handling
 
-# Scikit-learn components for machine learning
-from sklearn.ensemble import RandomForestClassifier  # ML algorithm
-from sklearn.model_selection import cross_val_score  # Cross-Validation
-from sklearn.metrics import (accuracy_score, precision_score,  # Evaluation metrics
-                              recall_score, f1_score,
-                             confusion_matrix, classification_report)
-from sklearn.preprocessing import StandardScaler, OneHotEncoder  # Feature engineering
-from sklearn.impute import SimpleImputer  # Missing value handling
-from sklearn.pipeline import Pipeline  # ML workflow
+# Scikit-learn components for machine learning pipeline
+from sklearn.linear_model import Ridge  # Regularized linear regression model
+from sklearn.model_selection import cross_val_score, cross_validate  # Model evaluation
+from sklearn.metrics import mean_squared_error, r2_score  # Performance metrics
+from sklearn.preprocessing import StandardScaler, OneHotEncoder  # Feature preprocessing
+from sklearn.impute import SimpleImputer  # Handling missing values
+from sklearn.pipeline import Pipeline  # ML pipeline construction
 from sklearn.compose import ColumnTransformer  # Column-wise transformations
+from sklearn.feature_selection import SequentialFeatureSelector  # Feature selection
 
-# CONFIGURATION SECTION
-DATA_DIR = "saved_data"
-os.makedirs(DATA_DIR, exist_ok=True)
+# --- CONFIGURATION ---
+DATA_DIR = "saved_data"   # Directory for storing processed data and artifacts
+os.makedirs(DATA_DIR, exist_ok=True)  # Create directory if it doesn't exist
 
-
-# HELPER FUNCTIONS
+# --- HELPER FUNCTIONS ---
 def save_artifact(obj, filename):
-    """Serializes and saves Python objects to disk for persistence.
-    Uses pickle for serialization, which is efficient for scikit-learn objects."""
+    """Serialize and save Python objects to disk for later use.
+
+        Args:
+            obj: Any Python object to be serialized
+            filename: Name of the file to save to (within DATA_DIR)
+        """
+
     with open(f"{DATA_DIR}/{filename}", 'wb') as f:
         pickle.dump(obj, f)
 
 
 def load_artifact(filename):
-    """Loads serialized objects from disk.
-    Ensures we can reuse preprocessed data and models across sessions."""
+    """Load previously saved Python objects from disk.
+
+        Args:
+            filename: Name of the file to load (within DATA_DIR)
+        Returns:
+            The deserialized Python object
+        """
     with open(f"{DATA_DIR}/{filename}", 'rb') as f:
         return pickle.load(f)
 
-
-# DATA LOADING AND PREPROCESSING
 @st.cache_data
 def load_data():
-    if 'uploaded_data' in st.session_state:
-        df = st.session_state['uploaded_data'].copy()
-        df = df.drop(columns=['ID', 'dtir1', 'submission_of_application', 'year'], errors='ignore')
-        df.to_csv(f"{DATA_DIR}/1_raw_data.csv", index=False)
-        return df
-    else:
-        st.warning("Please upload your dataset via the 'Data Import and Overview' page before preprocessing.")
-        return pd.DataFrame()  # Return empty DataFrame as a fallback
+    df = pd.read_csv("Loan_Default.csv")
+    # Drop unnecessary columns
+    df = df.drop(columns=['ID', 'dtir1', 'submission_of_application', 'year'], errors='ignore')
+    # Save raw data for reference
+    df.to_csv(f"{DATA_DIR}/1_raw_data.csv", index=False)
+    return df
 
-
-# PREPROCESSOR CREATION
 def create_preprocessor():
-    """Creates and fits a preprocessing pipeline for the data."""
+    """Create and fit a preprocessing pipeline for the loan data.
+        """
     df = load_data()
-    if df.empty:
-        st.error("Data not loaded. Upload a dataset first.")
-        return None
+    X = df.drop('loan_amount', axis=1)
 
-    if 'Status' not in df.columns:
-        st.error("'Status' column is missing. Cannot proceed.")
-        return None
-
-    X = df.drop('Status', axis=1)
-
-    # Feature type identification
+    # Identify numerical and categorical columns
     numerical_cols = X.select_dtypes(include=['int64', 'float64']).columns.tolist()
-    categorical_cols = X.select_dtypes(include=['object']).columns.tolist()
-
+    categorical_cols = X.select_dtypes( include=['object']).columns.tolist()
     save_artifact({'numerical': numerical_cols, 'categorical': categorical_cols},
                   "2_column_types.pkl")
 
-    # Create preprocessing pipelines
+    # Numerical feature pipeline: impute missing values with median and standardize
     numerical_transformer = Pipeline(steps=[
         ('imputer', SimpleImputer(strategy='median')),
-        ('scaler', StandardScaler())
-    ])
+        ('scaler', StandardScaler())])
 
+    # Categorical feature pipeline: impute missing values with mode and one-hot encode
     categorical_transformer = Pipeline(steps=[
         ('imputer', SimpleImputer(strategy='most_frequent')),
-        ('onehot', OneHotEncoder(handle_unknown='ignore', sparse_output=False))
-    ])
+        ('onehot', OneHotEncoder(handle_unknown='ignore'))])
 
+    # Combine pipelines in ColumnTransformer
     preprocessor = ColumnTransformer(
         transformers=[
             ('num', numerical_transformer, numerical_cols),
-            ('cat', categorical_transformer, categorical_cols)
-        ])
-
-    # Check for all-NaN columns before fitting
-    null_cols = X.columns[X.isnull().all()].tolist()
-    if null_cols:
-        st.warning(f"Removing all-NaN columns: {null_cols}")
-        X = X.drop(columns=null_cols)
-        # Update numerical/categorical columns
-        numerical_cols = [col for col in numerical_cols if col not in null_cols]
-        categorical_cols = [col for col in categorical_cols if col not in null_cols]
-
-    # Fit the preprocessor
+            ('cat', categorical_transformer, categorical_cols)])
     preprocessor.fit(X)
     save_artifact(preprocessor, "3_preprocessor.pkl")
 
-    # Transform and save processed data
+    # Transform data and save processed version
     X_processed = preprocessor.transform(X)
-
-    # Get feature names
-    num_features = preprocessor.named_transformers_['num'].get_feature_names_out(numerical_cols)
-    cat_features = preprocessor.named_transformers_['cat'].named_steps['onehot'].get_feature_names_out(categorical_cols)
+    num_features = preprocessor.named_transformers_['num'].get_feature_names_out()
+    cat_features = preprocessor.named_transformers_['cat'].named_steps['onehot'].get_feature_names_out()
     all_features = np.concatenate([num_features, cat_features])
-
     processed_df = pd.DataFrame(X_processed, columns=all_features)
-    processed_df['Status'] = df['Status'].values
+    processed_df['loan_amount'] = df['loan_amount'].values
     processed_df.to_csv(f"{DATA_DIR}/4_processed_data.csv", index=False)
-
     return preprocessor
 
-# STREAMLIT PAGE FUNCTIONS
+
+# --- STREAMLIT PAGES ---
 def Home_Page():
+    """Render the home page with project overview and team information."""
 
-    #LOGO
-    logo = Image.open("LDP.jpeg")
+    # LOGO
+    logo = Image.open("LDP.jpg")
+
     st.image(logo, caption="", width=300)
+    st.title("Loan Default Prediction Web App")
+    st.markdown("""
+        ---
 
-    #FUNCTIONS
-    st.title("Loan Default Prediction System")
+        ### Project Overview
 
-    st.write("""
-       Welcome to the Loan Default Prediction System. This application helps financial institutions 
-       assess the risk of loan default using machine learning.
+        This interactive web application was developed as part of an applied regression and machine learning course project. It simulates a real-world scenario where a data science team is tasked with building a system to *predict the probability of loan default* based on demographic and financial features.
 
-       Use the navigation menu on the left to explore different sections of the application.
-       """)
+        Users can explore the dataset, follow the full machine learning workflow, and interact with the final model to generate real-time predictions.
+
+        ---
+
+        ### What This App Covers:
+        - *Data Import and Exploration*
+        - *Cleaning, Encoding, and Preprocessing*
+        - *Feature Selection using Best Subset Selection*
+        - *Model Training with Ridge Regression*
+        - *Model Evaluation (RMSE, R², Cross-Validation)*
+        - *Interactive Prediction Interface*
+        - *Final Results Interpretation and Conclusion*
+
+        ---
+
+        ### How to Use This App
+        Use the sidebar to navigate through the project steps:
+
+        1. Data Import and Overview – Explore the dataset. 
+        2. Data Preprocessing – Clean, impute, encode, and standardize
+        3. Feature Selection – Best subset based on Ridge
+        4. Model Training – Fit Ridge regression to selected features
+        5. Model Evaluation – RMSE, R², and k-Fold CV
+        6. Prediction – Enter values and predict default probability
+        7. Conclusion – Insights and limitations
+
+        ---
+
+        *Developed by:* [Group 5 ]  
+        *Tool:* Python + Streamlit + Scikit-learn
+
+        """)
 
 
-    st.markdown("""---
+    # Members section
+    st.markdown("### Team Members")
+    team_members = [
+        ["Kingsley Sarfo", "22252461", "Project Coordinator", "https://loan-predictor-hbbz24vwfzaue2qx4hwcat.streamlit.app"],
+        ["Francisca Sarpong", "22255796", "Data Preprocessing", "https://kftalde5ypwd5a3qqejuvo.streamlit.app"],
+        ["George Owell", "22256146", "Model Evaluation", "https://loandefaultpredictionapp-utmbic9znd7uzqqhs9zgo6.streamlit.app"],
+        ["Barima Addo", "22254055", "UI Testing", "https://loandefaultapp-ky4yy9kmt6ehsq8jqdcgs2.streamlit.app"],
+        ["Marcus Akrobettoe", "11410687", "Feature Selection", "https://models-loan-default-prediction.streamlit.app"]
+    ]
 
-    ## Team Members (Group 5)
+    df = pd.DataFrame(team_members,
+                      columns=["Name", "Student ID", "Role", "Deployment Link"])
 
-    | Name                     | Student ID | Role                                             | Deployment link                                              |
-    |--------------------------|------------|--------------------------------------------------|--------------------------------------------------------------|
-    | Kingsley Sarfo           | 22252461   | Project Coordination, App Design & Preprocessing | https://loan-predictor-hbbz24vwfzaue2qx4hwcat.streamlit.app  |                           
-    | Francisca Manu Sarpong   | 22255796   | Documentation & Deployment                       | https://kftalde5ypwd5a3qqejuvo.streamlit.app                 |               
-    | George Owell             | 22256146   | Model Evaluation & Cross-validation              | loandefaultpredictionapp-utmbic9znd7uzqqhs9zgo6.streamlit.app|
-    | Barima Owiredu Addo      | 22254055   | UI & Prediction Testing                          | https://loandefaultapp-ky4yy9kmt6ehsq8jqdcgs2.streamlit.app/ |
-    | Akrobettoe Marcus        | 11410687   | Feature Selection & Model Training               | https://models-loan-default-prediction.streamlit.app/        |
+    # Display as interactive table
+    st.dataframe(df,
+                 hide_index=True,
+                 use_container_width=True,
+                 column_config={
+                     "Deployment Link": st.column_config.LinkColumn()
+                 })
 
-    ---
-    """)
+    # Project Overview Section
+    st.markdown("""
 
+        ### Instructions:
 
+        1. Use the sidebar menu on the left to navigate between the pages.
+        2. Start from *"1. Data Upload and Overview"*.
+        3. Follow each step in sequence for best results.
 
+        ---
+        ###  Dataset Information:
+        - Source: [Kaggle - Loan Default Dataset](https://www.kaggle.com/datasets/yasserh/loan-default-dataset)
+        - Target variable: loan_amount
+        """)
 
 def Data_Import_and_Overview_page():
-    """Handles data upload and exploratory data analysis (EDA) including:
-       - Basic statistics (mean, median, missing values)
-       - Target variable distribution
-       - Correlation analysis
-       - Interactive visualizations (histograms, boxplots, etc.)"""
+    """Page for data upload, exploration and visualization."""
+    st.title("1. Data Import and Overview")
 
-    st.title(" 1. Data Import and Overview")
-
-    st.subheader("Upload Your Dataset")
-    uploaded_file = st.file_uploader("Choose a CSV file", type="csv",
-                                     help="Please upload your loan data in CSV format")
-
+    # File uploader widget
+    st.subheader("Upload Your Loan Data (CSV)")
+    uploaded_file = st.file_uploader("Upload your loan data CSV", type="csv")
     if uploaded_file is not None:
-        try:
-            # Read the uploaded file
-            df = pd.read_csv(uploaded_file)
-            st.session_state['uploaded_data'] = df
-            st.success("File successfully uploaded!")
-
-            # ========================
-            # 1. Summary Statistics
-            # ========================
-            st.subheader("1. Summary Statistics")
-
-            # Basic stats
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Total Records", df.shape[0])
-            with col2:
-                st.metric("Total Features", df.shape[1])
-            with col3:
-                if 'Status' in df.columns:
-                    st.metric("Default Rate", f"{df['Status'].mean():.2%}")
-
-            # Numerical features summary
-            st.markdown("**Numerical Features Summary**")
-            st.dataframe(df.describe().T.style.format("{:.2f}"))
-
-            # Categorical features summary
-            cat_cols = df.select_dtypes(include=['object']).columns
-            if len(cat_cols) > 0:
-                st.markdown("**Categorical Features Summary**")
-                cat_summary = pd.DataFrame({
-                    'Unique Values': df[cat_cols].nunique(),
-                    'Most Common': df[cat_cols].mode().iloc[0],
-                    'Missing Values': df[cat_cols].isnull().sum()
-                })
-                st.dataframe(cat_summary)
-
-            # Missing values analysis
-            st.markdown("**Missing Values Analysis**")
-            missing = df.isnull().sum().to_frame('Missing Values')
-            missing['Percentage'] = (missing['Missing Values'] / len(df)) * 100
-            st.dataframe(missing.style.format({'Percentage': '{:.2f}%'}))
-
-            # ========================
-            # 2. Data Visualizations
-            # ========================
-            st.subheader("Data Visualizations")
-
-            # Target distribution (if exists)
-            if 'Status' in df.columns:
-                st.markdown("**Target Variable Distribution**")
-                fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-
-                # Countplot
-                sns.countplot(x='Status', data=df, ax=ax[0])
-                ax[0].set_title('Default Status Count')
-
-                # Pie chart
-                df['Status'].value_counts().plot.pie(autopct='%1.1f%%', ax=ax[1])
-                ax[1].set_title('Default Status Proportion')
-                st.pyplot(fig)
-
-            # Numerical distributions
-            num_cols = df.select_dtypes(include=['int64', 'float64']).columns
-            if len(num_cols) > 0:
-                st.markdown("**Numerical Features Distribution**")
-                selected_num = st.multiselect("Select numerical features to visualize",
-                                              num_cols, default=num_cols[3:])
-
-                if selected_num:
-                    fig, ax = plt.subplots(len(selected_num), 2, figsize=(14, 5 * len(selected_num)))
-                    for i, col in enumerate(selected_num):
-                        # Histogram
-                        sns.histplot(df[col], kde=True, ax=ax[i, 0])
-                        ax[i, 0].set_title(f'{col} Distribution')
-                        ax[i, 0].tick_params(axis='x', rotation=45)
-
-                        # Boxplot
-                        sns.boxplot(x=df[col], ax=ax[i, 1])
-                        ax[i, 1].set_title(f'{col} Boxplot')
-                        ax[i, 1].tick_params(axis='x', rotation=45)
-
-                    plt.tight_layout()
-                    st.pyplot(fig)
-
-                    # Scatterplots for key financial relationships
-                    if len(selected_num) >= 2:
-                        st.markdown("**Key Financial Relationships**")
-
-                        # Create more relevant comparisons for loan analysis
-                        fig, ax = plt.subplots(1, 2, figsize=(14, 6))
-
-                        # 1. Debt-to-Income Ratio vs Credit Score (most important relationship)
-                        if all(col in df.columns for col in ['loan_amount', 'income', 'Credit_Score']):
-                            df['debt_to_income'] = df['loan_amount'] / df['income']
-                            sns.scatterplot(x='debt_to_income', y='Credit_Score', data=df, ax=ax[0])
-                            ax[0].set_title('Credit Score vs Debt-to-Income Ratio')
-                            ax[0].set_xlabel('Loan Amount / Annual Income')
-                            ax[0].set_ylabel('Credit Score')
-
-                            if 'Status' in df.columns:
-                                sns.scatterplot(x='debt_to_income', y='Credit_Score', hue='Status',
-                                                data=df, ax=ax[1], palette=['green', 'red'], alpha=0.7)
-                                ax[1].set_title('Default Status by Debt-to-Income and Credit Score')
-                                ax[1].set_xlabel('Loan Amount / Annual Income')
-                                ax[1].set_ylabel('Credit Score')
-
-                        # 2. Loan-to-Value Ratio vs Income (alternative comparison)
-                        elif all(col in df.columns for col in ['loan_amount', 'property_value', 'income']):
-                            df['loan_to_value'] = df['loan_amount'] / df['property_value']
-                            sns.scatterplot(x='loan_to_value', y='income', data=df, ax=ax[0])
-                            ax[0].set_title('Income vs Loan-to-Value Ratio')
-                            ax[0].set_xlabel('Loan Amount / Property Value')
-                            ax[0].set_ylabel('Annual Income')
-
-                            if 'Status' in df.columns:
-                                sns.scatterplot(x='loan_to_value', y='income', hue='Status',
-                                                data=df, ax=ax[1], palette=['green', 'red'], alpha=0.7)
-                                ax[1].set_title('Default Status by LTV and Income')
-                                ax[1].set_xlabel('Loan Amount / Property Value')
-                                ax[1].set_ylabel('Annual Income')
-
-                        # Fallback to original comparison if expected columns missing
-                        else:
-                            sns.scatterplot(x=selected_num[0], y=selected_num[1], data=df, ax=ax[0])
-                            ax[0].set_title(f'{selected_num[0]} vs {selected_num[1]}')
-
-                            if 'Status' in df.columns:
-                                sns.scatterplot(x=selected_num[0], y=selected_num[1], hue='Status',
-                                                data=df, ax=ax[1], palette=['green', 'red'])
-                                ax[1].set_title(f'{selected_num[0]} vs {selected_num[1]} by Default Status')
-
-                        plt.tight_layout()
-                        st.pyplot(fig)
-
-            # Correlation matrix
-            if len(num_cols) > 1:
-                st.markdown("**Correlation Matrix**")
-                corr_matrix = df[num_cols].corr()
-
-                fig, ax = plt.subplots(figsize=(10, 8))
-                sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap='coolwarm',
-                            center=0, ax=ax)
-                ax.set_title("Feature Correlations")
-                st.pyplot(fig)
-
-                # Top correlations
-                st.markdown("**Top Feature Correlations**")
-                corr_pairs = corr_matrix.unstack().sort_values(key=abs, ascending=False)
-                st.dataframe(corr_pairs[corr_pairs != 1].head(10).to_frame('Correlation'))
-
-            # Categorical visualizations
-            if len(cat_cols) > 0:
-                st.markdown("**Categorical Features Analysis**")
-                selected_cat = st.selectbox("Select categorical feature", cat_cols)
-
-                fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-
-                # Countplot
-                sns.countplot(y=selected_cat, data=df, ax=ax[0],
-                              order=df[selected_cat].value_counts().index)
-                ax[0].set_title(f'{selected_cat} Distribution')
-
-                # Relationship with target (if exists)
-                if 'Status' in df.columns:
-                    sns.barplot(x='Status', y=selected_cat, data=df, ax=ax[1],
-                                estimator=lambda x: len(x) / len(df) * 100)
-                    ax[1].set_title(f'Default Rate by {selected_cat}')
-                    ax[1].set_ylabel('Default Rate (%)')
-                else:
-                    df[selected_cat].value_counts().plot.pie(autopct='%1.1f%%', ax=ax[1])
-                    ax[1].set_title(f'{selected_cat} Proportion')
-
-                st.pyplot(fig)
-
-        except Exception as e:
-            st.error(f"Error processing file: {str(e)}")
-
-
-def Data_Preprocessing_page():
-    st.title("2. Data Preprocessing")
-    """Manages the data preprocessing workflow:
-        - Executes the preprocessing pipeline
-        - Displays sample processed data
-        - Shows feature engineering details"""
-
-    if st.button("Run Data Preprocessing"):
-        preprocessor = create_preprocessor()
-        if preprocessor:
-            processed_df = pd.read_csv(f"{DATA_DIR}/4_processed_data.csv")
-
-            st.subheader("Processed Data Sample")
-            st.dataframe(processed_df.head())
-
-            st.subheader("Preprocessing Details")
-            st.write("Numerical features:", len(preprocessor.named_transformers_['num'].get_feature_names_out()))
-            st.write("Categorical features:",
-                     len(preprocessor.named_transformers_['cat'].named_steps['onehot'].get_feature_names_out()))
-
-            st.success("Preprocessing completed and saved!")
-
-
-def Feature_Selection_page():
-    """Optimized feature selection with pre-filtering and faster methods."""
-
-    st.title("3. Feature Selection")
-
-    try:
-        processed_df = pd.read_csv(f"{DATA_DIR}/4_processed_data.csv")
-        X_full = processed_df.drop('Status', axis=1)
-        y = processed_df['Status']
-    except:
-        st.warning("Please complete preprocessing first.")
+        df = pd.read_csv(uploaded_file)
+        df = df.drop(columns=['ID', 'dtir1', 'submission_of_application', 'year'], errors='ignore')
+        st.session_state['uploaded_file'] = uploaded_file
+        st.session_state['df'] = df
+        st.success("File uploaded and loaded! Data will be used throughout the app.")
+    elif 'df' in st.session_state:
+        df = st.session_state['df']
+    else:
+        st.warning("Please upload your data to use the app.")
         return
 
-    # =============================================
-    # 1. PRE-FILTERING SECTION (NEW)
-    # =============================================
-    st.subheader("Stage 1: Initial Feature Filtering")
+    st.dataframe(df.head())
 
-    col1, col2 = st.columns(2)
+    # Data summary statistics
+    st.subheader("1. Summary Statistics")
+
+    # Basic stats
+    col1, col2, col3 = st.columns(3)
     with col1:
-        prefilter_method = st.radio(
-            "Pre-filtering method",
-            ["Correlation Threshold",
-             "Mutual Information",
-             "None (use all features)"],
-            help="Reduce feature space first for faster processing"
-        )
-
+        st.metric("Total Records", df.shape[0])
     with col2:
-        if prefilter_method != "None (use all features)":
-            threshold = st.slider(
-                "Keep top % of features",
-                10, 100, 30,
-                help="Higher values keep more features but slow down selection"
-            )
+        st.metric("Total Features", df.shape[1])
+    with col3:
+        if 'loan_amount' in df.columns:
+            st.metric("Average Loan Amount", f"{df['loan_amount'].mean():,.2f}")
 
-    # Apply pre-filtering if selected
-    if prefilter_method == "Correlation Threshold":
-        corr_matrix = processed_df.corr()
-        corr_with_target = corr_matrix['Status'].abs().sort_values(ascending=False)
-        threshold_value = np.percentile(corr_with_target, 100 - threshold)
-        selected = corr_with_target[corr_with_target > threshold_value].index
-        X = X_full[selected.drop('Status') if 'Status' in selected else selected]
-        st.success(f"Reduced from {X_full.shape[1]} to {X.shape[1]} features based on correlation")
+    # Numerical features summary
+    st.markdown("**Numerical Features Summary**")
+    st.dataframe(df.describe().T.style.format("{:.2f}"))
 
-    elif prefilter_method == "Mutual Information":
-        from sklearn.feature_selection import SelectPercentile, mutual_info_classif
-        selector = SelectPercentile(mutual_info_classif, percentile=threshold)
-        selector.fit(X_full, y)
-        X = X_full.loc[:, selector.get_support()]
-        st.success(f"Reduced from {X_full.shape[1]} to {X.shape[1]} features based on mutual information")
-    else:
-        X = X_full.copy()
-        st.info("Using all features - this may be slow for large datasets")
+    # Categorical features summary
+    cat_cols = df.select_dtypes(include=['object']).columns
+    if len(cat_cols) > 0:
+        st.markdown("**Categorical Features Summary**")
+        cat_summary = pd.DataFrame({
+            'Unique Values': df[cat_cols].nunique(),
+            'Most Common': df[cat_cols].mode().iloc[0],
+            'Missing Values': df[cat_cols].isnull().sum()
+        })
+        st.dataframe(cat_summary)
 
-    # =============================================
-    # 2. CORRELATION ANALYSIS (EXISTING)
-    # =============================================
-    st.subheader("Feature Correlation Analysis")
-    corr_matrix = processed_df.corr()
-    corr_with_target = corr_matrix['Status'].sort_values(key=abs, ascending=False)
+    # Missing values analysis
+    st.markdown("**Missing Values Analysis**")
+    missing = df.isnull().sum().to_frame('Missing Values')
+    missing['Percentage'] = (missing['Missing Values'] / len(df)) * 100
+    st.dataframe(missing.style.format({'Percentage': '{:.2f}%'}))
 
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.dataframe(corr_with_target.to_frame("Correlation with Target").style.background_gradient(cmap='coolwarm'))
+    # ========================
+    # 2. Data Visualizations
+    # ========================
+    st.subheader("Data Visualizations")
 
-    with col2:
-        top_visual = st.selectbox("Top features to plot", [5, 10, 15, 20], index=1)
+    # Target distribution (loan amount)
+    if 'loan_amount' in df.columns:
+        st.markdown("**Loan Amount Distribution**")
+        fig, ax = plt.subplots(1, 2, figsize=(12, 5))
 
-    # Plot top correlations
-    top_features = corr_with_target.index[1:top_visual + 1]  # Exclude 'Status'
-    fig, ax = plt.subplots(figsize=(10, 5))
-    sns.barplot(x=corr_with_target[top_features], y=top_features, ax=ax)
-    ax.set_title(f"Top {top_visual} Correlated Features")
-    st.pyplot(fig)
+        # Histogram
+        sns.histplot(x='loan_amount', data=df, kde=True, ax=ax[0])
+        ax[0].set_title('Loan Amount Distribution')
+        ax[0].set_xlabel('Loan Amount')
 
-    # =============================================
-    # 3. FEATURE SELECTION (OPTIMIZED)
-    # =============================================
-    st.subheader("Stage 2: Feature Selection")
+        # Boxplot
+        sns.boxplot(x='loan_amount', data=df, ax=ax[1])
+        ax[1].set_title('Loan Amount Spread')
+        ax[1].set_xlabel('Loan Amount')
+        st.pyplot(fig)
 
-    method = st.radio(
-        "Selection algorithm",
-        ["Sequential Forward Selection (Recommended)",
-         "Random Forest Importance (Fastest)",
-         "L1 Regularization (LASSO)"],
-        index=0
-    )
+    # Numerical distributions
+    num_cols = df.select_dtypes(include=['int64', 'float64']).columns
+    if len(num_cols) > 0:
+        st.markdown("**Numerical Features Distribution**")
+        selected_num = st.multiselect("Select numerical features to visualize",
+                                      num_cols,
+                                      default=[col for col in ['income', 'Credit_Score', 'property_value'] if
+                                               col in num_cols])
 
-    max_features = st.slider(
-        "Maximum features to select",
-        1, min(15, X.shape[1]), 5,
-        help="Fewer features train faster but may reduce accuracy"
-    )
+        if selected_num:
+            fig, ax = plt.subplots(len(selected_num), 2, figsize=(14, 5 * len(selected_num)))
+            for i, col in enumerate(selected_num):
+                # Histogram
+                sns.histplot(df[col], kde=True, ax=ax[i, 0])
+                ax[i, 0].set_title(f'{col} Distribution')
+                ax[i, 0].tick_params(axis='x', rotation=45)
 
-    scoring_metric = st.selectbox(
-        "Optimization metric",
-        ['accuracy', 'precision', 'recall', 'f1', 'roc_auc'],
-        index=4,
-        help="Choose metric most important for your business case"
-    )
+                # Boxplot
+                sns.boxplot(x=df[col], ax=ax[i, 1])
+                ax[i, 1].set_title(f'{col} Boxplot')
+                ax[i, 1].tick_params(axis='x', rotation=45)
 
-    if st.button("Run Feature Selection", help="May take several minutes for large feature sets"):
-        with st.spinner(f"Running {method}... Please wait..."):
-
-            if "Sequential Forward" in method:
-                from sklearn.feature_selection import SequentialFeatureSelector
-                from sklearn.linear_model import LogisticRegression
-
-                # Use faster solver and fewer iterations for feature selection
-                estimator = LogisticRegression(
-                    solver='liblinear',
-                    max_iter=500,
-                    random_state=42,
-                    n_jobs=-1  # Use all CPU cores
-                )
-
-                sfs = SequentialFeatureSelector(
-                    estimator,
-                    n_features_to_select=max_features,
-                    direction='forward',
-                    scoring=scoring_metric,
-                    cv=5,
-                    n_jobs=-1  # Parallel processing
-                )
-
-                sfs.fit(X, y)
-                selected_features = X.columns[sfs.get_support()].tolist()
-
-                # Save results
-                save_artifact({
-                    'selected_features': selected_features,
-                    'selection_metric': scoring_metric,
-                    'method': 'SequentialForward',
-                    'support_mask': sfs.get_support()
-                }, "5_best_subset_features.pkl")
-
-                # Show results
-                st.success(f"Selected {len(selected_features)} features:")
-                st.write(selected_features)
-
-                # Performance evaluation
-                from sklearn.model_selection import cross_validate
-                cv_results = cross_validate(
-                    estimator,
-                    X[selected_features],
-                    y,
-                    cv=5,
-                    scoring=['accuracy', 'precision', 'recall', 'f1', 'roc_auc']
-                )
-
-                metrics_df = pd.DataFrame({
-                    'Mean': [cv_results[f'test_{m}'].mean() for m in
-                             ['accuracy', 'precision', 'recall', 'f1', 'roc_auc']],
-                    'Std': [cv_results[f'test_{m}'].std() for m in
-                            ['accuracy', 'precision', 'recall', 'f1', 'roc_auc']]
-                }, index=['Accuracy', 'Precision', 'Recall', 'F1 Score', 'ROC AUC'])
-
-                st.subheader("Cross-Validation Performance")
-                st.dataframe(metrics_df.style.format("{:.2%}"))
-
-                # Feature importance plot
-                estimator.fit(X[selected_features], y)
-                if hasattr(estimator, 'coef_'):
-                    importance = pd.Series(
-                        np.abs(estimator.coef_[0]),
-                        index=selected_features
-                    ).sort_values(ascending=False)
-
-                    fig, ax = plt.subplots(figsize=(10, 5))
-                    importance.plot(kind='barh', ax=ax)
-                    ax.set_title("Feature Importance (Absolute Coefficients)")
-                    st.pyplot(fig)
-
-            elif "Random Forest" in method:
-                from sklearn.ensemble import RandomForestClassifier
-
-                rf = RandomForestClassifier(
-                    n_estimators=100,
-                    random_state=42,
-                    n_jobs=-1
-                )
-                rf.fit(X, y)
-
-                importance = pd.Series(
-                    rf.feature_importances_,
-                    index=X.columns
-                ).sort_values(ascending=False)
-
-                selected_features = importance.head(max_features).index.tolist()
-
-                save_artifact({
-                    'selected_features': selected_features,
-                    'selection_metric': "random_forest_importance",
-                    'importance_values': importance[selected_features].values.tolist()
-                }, "5_best_subset_features.pkl")
-
-                st.success(f"Top {len(selected_features)} features:")
-                st.write(selected_features)
-
-                fig, ax = plt.subplots(figsize=(10, 5))
-                importance[selected_features].plot(kind='barh', ax=ax)
-                ax.set_title("Feature Importance (Random Forest)")
-                st.pyplot(fig)
-
-            else:  # L1 Regularization
-                from sklearn.linear_model import LogisticRegressionCV
-
-                lasso = LogisticRegressionCV(
-                    penalty='l1',
-                    solver='liblinear',
-                    cv=5,
-                    scoring=scoring_metric,
-                    random_state=42,
-                    max_iter=1000
-                )
-                lasso.fit(X, y)
-
-                selected_features = X.columns[lasso.coef_[0] != 0].tolist()
-
-                # If too many features selected, take top by coefficient magnitude
-                if len(selected_features) > max_features:
-                    importance = pd.Series(
-                        np.abs(lasso.coef_[0]),
-                        index=X.columns
-                    ).sort_values(ascending=False)
-                    selected_features = importance.head(max_features).index.tolist()
-
-                save_artifact({
-                    'selected_features': selected_features,
-                    'selection_metric': scoring_metric,
-                    'method': 'L1_Regularization',
-                    'coefficients': lasso.coef_[0][lasso.coef_[0] != 0].tolist()
-                }, "5_best_subset_features.pkl")
-
-                st.success(f"Selected {len(selected_features)} features via L1:")
-                st.write(selected_features)
-
-                # Show coefficients
-                coef_df = pd.DataFrame({
-                    'Feature': selected_features,
-                    'Coefficient': lasso.coef_[0][lasso.coef_[0] != 0]
-                }).sort_values('Coefficient', key=abs, ascending=False)
-
-                st.dataframe(coef_df.style.bar(
-                    subset=['Coefficient'],
-                    align='mid',
-                    color=['#d65f5f', '#5fba7d']
-                ))
-
-    # =============================================
-    # 4. FEATURE ANALYSIS (EXISTING)
-    # =============================================
-    st.subheader("Feature Analysis")
-
-    try:
-        feature_results = load_artifact("5_best_subset_features.pkl")
-        selected_features = feature_results['selected_features']
-
-        st.write("**Currently selected features:**")
-        st.write(selected_features)
-
-        if 'importance_values' in feature_results:
-            fig, ax = plt.subplots(figsize=(10, 5))
-            pd.Series(
-                feature_results['importance_values'],
-                index=selected_features
-            ).sort_values().plot(kind='barh', ax=ax)
-            ax.set_title("Feature Importance")
+            plt.tight_layout()
             st.pyplot(fig)
 
-    except:
-        st.warning("No feature selection results found. Run selection first.")
+            # Scatterplots of numerical features vs loan amount
+            if 'loan_amount' in df.columns:
+                st.markdown("**Relationships with Loan Amount**")
 
+                fig, ax = plt.subplots(1, 2, figsize=(14, 6))
 
+                # 1. Income vs Loan Amount
+                if 'income' in df.columns:
+                    sns.scatterplot(x='income', y='loan_amount', data=df, ax=ax[0])
+                    ax[0].set_title('Loan Amount vs Income')
+                    ax[0].set_xlabel('Income ()')
+                    ax[0].set_ylabel('Loan Amount')
+                else:
+                    sns.scatterplot(x=selected_num[0], y='loan_amount', data=df, ax=ax[0])
+                    ax[0].set_title(f'Loan Amount vs {selected_num[0]}')
+                    ax[0].set_xlabel(selected_num[0])
+                    ax[0].set_ylabel('Loan Amount')
 
-def Model_Selection_And_Training_page():
-    """Handles model training with:
-        - Random Forest classifier (ensemble method)
-        - Hyperparameter tuning (n_estimators, max_depth, etc.)
-        - 5-fold cross-validation for robust performance estimation
-        - Full model training on entire dataset"""
+                # 2. Credit Score vs Loan Amount
+                if 'Credit_Score' in df.columns:
+                    sns.scatterplot(x='Credit_Score', y='loan_amount', data=df, ax=ax[1])
+                    ax[1].set_title('Loan Amount vs Credit Score')
+                    ax[1].set_xlabel('Credit Score')
+                    ax[1].set_ylabel('Loan Amount')
+                elif len(selected_num) > 1:
+                    sns.scatterplot(x=selected_num[1], y='loan_amount', data=df, ax=ax[1])
+                    ax[1].set_title(f'Loan Amount vs {selected_num[1]}')
+                    ax[1].set_xlabel(selected_num[1])
+                    ax[1].set_ylabel('Loan Amount')
 
-    st.title("4. Model Selection and Training")
+                plt.tight_layout()
+                st.pyplot(fig)
 
+    # Correlation matrix
+    if len(num_cols) > 1 and 'loan_amount' in num_cols:
+        st.markdown("**Correlation Matrix (with Loan Amount)**")
+        corr_matrix = df[num_cols].corr()
+
+        # Highlight correlations with loan amount
+        loan_corrs = corr_matrix['loan_amount'].sort_values(key=abs, ascending=False)
+
+        fig, ax = plt.subplots(figsize=(10, 8))
+        sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap='coolwarm',
+                    center=0, ax=ax)
+        ax.set_title("Feature Correlations with Loan Amount")
+        st.pyplot(fig)
+
+        # Top correlations with loan amount
+        st.markdown("**Top Correlations with Loan Amount**")
+        st.dataframe(loan_corrs.to_frame('Correlation').iloc[1:11])  # Exclude self-correlation
+
+    # Categorical visualizations vs loan amount
+    if len(cat_cols) > 0 and 'loan_amount' in df.columns:
+        st.markdown("**Categorical Features vs Loan Amount**")
+        selected_cat = st.selectbox("Select categorical feature", cat_cols)
+
+        fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+
+        # Countplot
+        sns.countplot(y=selected_cat, data=df, ax=ax[0],
+                      order=df[selected_cat].value_counts().index)
+        ax[0].set_title(f'{selected_cat} Distribution')
+
+        # Boxplot of loan amount by category
+        sns.boxplot(y=selected_cat, x='loan_amount', data=df,
+                    ax=ax[1], order=df[selected_cat].value_counts().index)
+        ax[1].set_title(f'Loan Amount by {selected_cat}')
+        ax[1].set_xlabel('Loan Amount')
+
+        st.pyplot(fig)
+
+def Data_Preprocessing_page():
+    """Manages the data preprocessing workflow:
+            - Executes the preprocessing pipeline
+            - Displays sample processed data"""
+
+    st.title("2. Data Preprocessing")
+    if st.button("Run Data Preprocessing"):
+        processed_df = pd.read_csv(f"{DATA_DIR}/4_processed_data.csv")
+        st.subheader("Processed Data Sample")
+        st.dataframe(processed_df.head())
+        st.success("Preprocessing completed and saved!")
+
+def Feature_Selection_page():
+    """Page for feature selection using sequential forward selection."""
+    st.title("3. Feature Selection")
     try:
         processed_df = pd.read_csv(f"{DATA_DIR}/4_processed_data.csv")
-        X = processed_df.drop('Status', axis=1)
-        y = processed_df['Status']
+        X = processed_df.drop('loan_amount', axis=1)
+        y = processed_df['loan_amount']
     except:
         st.warning("Please complete preprocessing first")
         return
 
-    # Model configuration
-    st.subheader("Model Parameters")
-    col1, col2 = st.columns(2)
-    with col1:
-        n_estimators = st.slider("Number of trees", 50, 500, 100)
-        max_depth = st.slider("Max depth", 2, 20, 5)
-    with col2:
-        min_samples_split = st.slider("Min samples split", 2, 10, 2)
-        bootstrap = st.checkbox("Bootstrap samples", value=True)
+    # Feature selection interface
+    st.subheader("Best Subset Selection (Ridge Regression)")
+    max_features = st.slider("Maximum features to evaluate", 1, 15, 5)
+    scoring_metric = st.selectbox("Selection metric", ['neg_root_mean_squared_error', 'r2'])
 
-    model = RandomForestClassifier(
-        n_estimators=n_estimators,
-        max_depth=max_depth,
-        min_samples_split=min_samples_split,
-        bootstrap=bootstrap,
-        random_state=42)
+    if st.button("Run Best Subset Selection"):
+        with st.spinner("Searching for optimal feature combinations..."):
+            estimator = Ridge()
+            sfs = SequentialFeatureSelector(estimator,
+                                            n_features_to_select=max_features,
+                                            direction='forward',
+                                            scoring=scoring_metric,
+                                            cv=5)
+            sfs.fit(X, y)
+            selected_features = X.columns[sfs.get_support()].tolist()
+            save_artifact({
+                'selected_features': selected_features,
+                'selection_metric': scoring_metric,
+                'support_mask': sfs.get_support()
+            }, "5_best_subset_features.pkl")
+            st.success(f"Selected {len(selected_features)} optimal features:")
+            st.write(selected_features)
+            st.subheader("Model Performance with Selected Features")
+            cv_results = cross_validate(estimator,
+                                       X[selected_features], y,
+                                       cv=5,
+                                       scoring=['neg_root_mean_squared_error', 'r2'])
+            metrics_df = pd.DataFrame({
+                'Mean': [abs(cv_results['test_neg_root_mean_squared_error'].mean()), cv_results['test_r2'].mean()],
+                'Std': [cv_results['test_neg_root_mean_squared_error'].std(), cv_results['test_r2'].std()]
+            }, index=['RMSE', 'R2 Score'])
+            st.dataframe(metrics_df.style.format("{:.4f}"))
+            estimator.fit(X[selected_features], y)
+            if hasattr(estimator, 'coef_'):
+                importance = pd.Series(np.abs(estimator.coef_),
+                                       index=selected_features).sort_values(ascending=False)
+                fig, ax = plt.subplots(figsize=(10, 6))
+                importance.plot(kind='barh', ax=ax)
+                ax.set_title("Feature Importance (Absolute Coefficients)")
+                st.pyplot(fig)
 
-    # Cross-validation
+
+def Model_Selection_And_Training_page():
+    """Page for Ridge Regression model selection, cross-validation, and final training.
+
+    This function handles:
+    - Loading preprocessed data
+    - Setting model hyperparameters
+    - Running cross-validation
+    - Training and saving the final model
+    """
+
+    # Page title
+    st.title("4. Model Selection and Training")
+
+    # Data loading with error handling
+    try:
+        # Load processed data from previous step
+        processed_df = pd.read_csv(f"{DATA_DIR}/4_processed_data.csv")
+        # Separate features (X) and target (y)
+        X = processed_df.drop('loan_amount', axis=1)
+        y = processed_df['loan_amount']
+    except:
+        # User-friendly error message if preprocessing isn't complete
+        st.warning("Please complete preprocessing first")
+        return  # Exit the function early
+
+    # --- Model Parameter Configuration ---
+    st.subheader("Ridge Regression Parameters")
+
+    # Interactive alpha parameter slider
+    # Default value of 1.0 is a reasonable starting point for Ridge
+    alpha = st.slider("Ridge regularization strength (alpha)",
+                      0.01,  # Minimum value
+                      10.0,  # Maximum value
+                      1.0)  # Default value
+
+    # Initialize Ridge Regression model with selected alpha
+    model = Ridge(alpha=alpha)
+
+    # --- Cross-Validation Section ---
     if st.button("Run Cross-Validation"):
-        cv_scores = cross_val_score(model, X, y, cv=5, scoring='accuracy')
-        st.write(f"Mean Accuracy: {cv_scores.mean():.2f} (±{cv_scores.std():.2f})")
+        # Perform 5-fold cross-validation
+        # Using negative RMSE (sklearn convention - lower is better)
+        rmse_scores = cross_val_score(model, X, y,
+                                      cv=5,
+                                      scoring='neg_root_mean_squared_error')
 
+        # Also calculate R² scores
+        r2_scores = cross_val_score(model, X, y,
+                                    cv=5,
+                                    scoring='r2')
+
+        # Display performance metrics with standard deviation
+        st.write(f"Mean RMSE: {abs(rmse_scores.mean()):.2f} (±{rmse_scores.std():.2f})")
+        st.write(f"Mean R²: {r2_scores.mean():.4f} (±{r2_scores.std():.4f})")
+
+        # Save cross-validation results for later use
         save_artifact({
-            'cv_scores': cv_scores,
-            'params': model.get_params()
+            'rmse_scores': rmse_scores,
+            'r2_scores': r2_scores,
+            'params': model.get_params()  # Store model configuration
         }, "6_cv_results.pkl")
 
-    # Full training
+    # --- Final Model Training ---
     if st.button("Train Final Model"):
+        # Fit model on entire dataset
         model.fit(X, y)
+
+        # Save the trained model for later use
         save_artifact(model, "7_trained_model.pkl")
 
-        # Generate and save predictions
+        # Generate and store predictions
         y_pred = model.predict(X)
-        y_proba = model.predict_proba(X)
-        processed_df['Prediction'] = y_pred
-        processed_df['Default_Probability'] = y_proba[:, 1]
+        processed_df['Predicted_Amount'] = y_pred
         processed_df.to_csv(f"{DATA_DIR}/8_predictions.csv", index=False)
 
+        # Store model and features in session state for other pages
         st.session_state['model'] = model
         st.session_state['features'] = X.columns.tolist()
+
+        # Success notification
         st.success("Model trained and saved!")
 
 
 def Model_Evaluation_page():
-    """Comprehensive model evaluation including:
-        - Accuracy, precision, recall, F1 scores
-        - Confusion matrix visualization
-        - Feature importance analysis
-        - Performance metric saving"""
+    """
+    Displays comprehensive evaluation metrics and visualizations for the trained Ridge Regression model.
+
+    This page:
+    1. Loads the trained model and predictions
+    2. Calculates key performance metrics (RMSE, R²)
+    3. Shows actual vs predicted values plot
+    4. Visualizes feature importance
+    """
 
     st.title("5. Model Evaluation")
 
+    # Load model artifacts with error handling
     try:
+        # Load the serialized model
         model = load_artifact("7_trained_model.pkl")
+        # Load the saved predictions
         predictions_df = pd.read_csv(f"{DATA_DIR}/8_predictions.csv")
     except:
+        # User-friendly message if model hasn't been trained
         st.warning("Please train the model first")
-        return
+        return  # Exit function early if artifacts missing
 
-    X = predictions_df.drop(['Status', 'Prediction', 'Default_Probability'], axis=1)
-    y = predictions_df['Status']
-    y_pred = predictions_df['Prediction']
+    # Extract true and predicted values
+    y_true = predictions_df['loan_amount']  # Actual loan amounts
+    y_pred = predictions_df['Predicted_Amount']  # Model predictions
 
-    # Performance metrics
+    # --- Performance Metrics Section ---
     st.subheader("Model Performance")
-    col1, col2 = st.columns(2)
 
-    with col1:
-        st.metric("Accuracy", f"{accuracy_score(y, y_pred):.2%}")
-        st.metric("Precision", f"{precision_score(y, y_pred):.2%}")
+    # Calculate Root Mean Squared Error (lower is better)
+    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    # Calculate R-squared score (0-1, higher is better)
+    r2 = r2_score(y_true, y_pred)
 
-    with col2:
-        st.metric("Recall", f"{recall_score(y, y_pred):.2%}")
-        st.metric("F1 Score", f"{f1_score(y, y_pred):.2%}")
+    # Display metrics in clean format
+    st.metric("RMSE", f"{rmse:.2f}")  # Formatted to 2 decimal places
+    st.metric("R²", f"{r2:.4f}")  # Formatted to 4 decimal places
 
-    # Confusion matrix
-    st.subheader("Confusion Matrix")
-    cm = confusion_matrix(y, y_pred)
+    # --- Actual vs Predicted Visualization ---
+    st.subheader("Actual vs Predicted Plot")
+
+    # Create scatter plot of predictions
     fig, ax = plt.subplots()
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax)
-    ax.set_xlabel('Predicted')
-    ax.set_ylabel('Actual')
+    # Scatter plot with transparency
+    ax.scatter(y_true, y_pred, alpha=0.3)
+    # Add perfect prediction line (y=x)
+    ax.plot([y_true.min(), y_true.max()],
+            [y_true.min(), y_true.max()],
+            'r--')  # Red dashed line
+    # Axis labels
+    ax.set_xlabel("Actual Loan Amount")
+    ax.set_ylabel("Predicted Loan Amount")
+    # Display plot in Streamlit
     st.pyplot(fig)
 
-    # Feature importance
+    # --- Feature Importance Analysis ---
     st.subheader("Feature Importance")
-    importance = pd.Series(model.feature_importances_, index=X.columns)
-    top_features = importance.nlargest(5)
 
-    fig, ax = plt.subplots()
-    top_features.plot(kind='barh', ax=ax)
-    st.pyplot(fig)
+    # Check if model has coefficients (Ridge regression does)
+    if hasattr(model, 'coef_'):
+        # Create absolute value of coefficients for importance
+        importance = pd.Series(
+            np.abs(model.coef_),
+            index=predictions_df.drop(
+                ['loan_amount', 'Predicted_Amount'],
+                axis=1).columns
+        )
 
-    # Save evaluation results
-    if st.button("Save Evaluation Results"):
-        save_artifact({
-            'confusion_matrix': cm,
-            'feature_importance': importance,
-            'classification_report': classification_report(y, y_pred, output_dict=True)
-        }, "9_evaluation_results.pkl")
-        st.success("Evaluation results saved!")
+        # Get top 5 most important features
+        top_features = importance.nlargest(5)
+
+        # Create horizontal bar plot
+        fig, ax = plt.subplots()
+        top_features.plot(kind='barh', ax=ax)
+
+        # Display plot
+        st.pyplot(fig)
 
 
 def Interactive_Prediction_page():
-    """Interactive interface for real-time predictions:
-        - Input form for applicant details
-        - Risk probability visualization
-        - Risk factor analysis
-        - Model diagnostics
-        Implements the complete prediction pipeline from raw input to risk assessment."""
+    """
+    Interactive page for making real-time loan default predictions using the trained model.
+
+    This page:
+    1. Loads required artifacts (model, preprocessor, feature list)
+    2. Provides input form for user to enter applicant data
+    3. Processes inputs and generates predictions
+    4. Displays prediction results with formatting
+    """
 
     st.title("6. Interactive Prediction")
 
+    # --- Load Required Artifacts with Error Handling ---
     try:
-        # Load necessary artifacts
+        # Load trained Ridge Regression model
         model = load_artifact("7_trained_model.pkl")
+        # Load preprocessor for feature transformation
         preprocessor = load_artifact("3_preprocessor.pkl")
+        # Load original feature names and types
         original_features = load_artifact("2_column_types.pkl")
     except:
+        # User-friendly message if prerequisites not met
         st.warning("Please complete model training first")
-        return
+        return  # Exit function if artifacts not available
 
+    # --- Input Form Section ---
     st.subheader("Enter Applicant Information")
+    input_data = {}  # Dictionary to store user inputs
 
-    # Create input form with original feature names
-    input_data = {}
+    # Create two columns for better form layout
     col1, col2 = st.columns(2)
 
+    # Numerical Features Input
     with col1:
-        input_data['loan_amount'] = st.number_input("Loan Amount", min_value=0, value=100000)
-        input_data['income'] = st.number_input("Annual Income", min_value=0, value=50000)
-        input_data['Credit_Score'] = st.number_input("Credit Score", min_value=300, max_value=850, value=700)
+        st.markdown("**Numerical Features**")
+        for feature in original_features['numerical']:
+            # Create number input for each numerical feature
+            input_data[feature] = st.number_input(
+                label=f"{feature}",
+                value=0.0,  # Default value
+                step=0.01,  # Increment step
+                format="%.2f"  # Display format
+            )
 
+    # Categorical Features Input
     with col2:
-        input_data['property_value'] = st.number_input("Property Value", min_value=0, value=200000)
-        input_data['loan_purpose'] = st.selectbox("Loan Purpose", ['p1', 'p2', 'p3', 'p4'])
-        input_data['Gender'] = st.selectbox("Gender", ['Male', 'Female', 'Joint', 'Sex Not Available'])
+        st.markdown("**Categorical Features**")
+        for feature in original_features['categorical']:
+            # Create text input for each categorical feature
+            input_data[feature] = st.text_input(
+                label=f"{feature}",
+                value="",  # Empty default
+                help=f"Enter {feature} value"
+            )
 
-    if st.button("Predict Default Risk"):
+    # --- Prediction Section ---
+    if st.button("Predict Default Amount", type="primary"):
+        # Create DataFrame from user inputs (single row)
+        df_template = pd.DataFrame([input_data])
+
         try:
-            # Create a DataFrame with all original features
-            df_template = pd.DataFrame(columns=original_features['numerical'] + original_features['categorical'])
-
-            # Fill in the provided values
-            for feature, value in input_data.items():
-                if feature in df_template.columns:
-                    df_template[feature] = [value]
-
-            # Fill missing values with defaults (0 for numerical, first category for categorical)
-            for col in df_template.columns:
-                if col not in input_data:
-                    if col in original_features['numerical']:
-                        df_template[col] = 0
-                    else:
-                        df_template[col] = df_template[col].astype('object')
-                        df_template[col] = df_template[col].fillna(
-                            df_template[col].iloc[0] if len(df_template[col]) > 0 else 'unknown')
-
-            # Apply the same preprocessing
+            # Preprocess inputs using saved pipeline
             X_processed = preprocessor.transform(df_template)
 
-            # Make prediction
-            probability = model.predict_proba(X_processed)[0]
+            # Generate prediction
+            predicted_amount = model.predict(X_processed)[0]  # Get single prediction
 
+            # Display formatted result
+            st.success(
+                f"Predicted Loan Default Amount: ${predicted_amount:,.2f}",
+            )
 
-            # ======================================
-            # Enhanced Prediction Results Section
-            # ======================================
-            st.subheader("Prediction Results")
-
-            # Show raw probabilities first
-            with st.expander("🔍 Detailed Probabilities"):
-                st.write(f"P(No Default): {probability[0]:.4f}")
-                st.write(f"P(Default): {probability[1]:.4f}")
-                st.write(f"Classification threshold: 50%")
-
-            # More sensitive risk classification
-            HIGH_RISK_THRESHOLD = 0.3  # Lowered from 0.5
-            MEDIUM_RISK_THRESHOLD = 0.1
-
-            if probability[1] > HIGH_RISK_THRESHOLD:
-                st.error(f"🚨 HIGH RISK (Default Probability: {probability[1]:.2%})")
-            elif probability[1] > MEDIUM_RISK_THRESHOLD:
-                st.warning(f"⚠️ MEDIUM RISK (Default Probability: {probability[1]:.2%})")
-            else:
-                st.success(f"✅ LOW RISK (Default Probability: {probability[0]:.2%})")
-
-            # Probability visualization
-            fig, ax = plt.subplots()
-            ax.bar(['No Default', 'Default'], probability, color=['green', 'red'])
-            ax.set_ylabel('Probability')
-            ax.set_ylim(0, 1)
-            st.pyplot(fig)
-
-            # ======================================
-            # Risk Factor Analysis Section
-            # ======================================
-            st.subheader("Risk Factor Analysis")
-
-            # Calculate key risk ratios
-            debt_to_income = input_data['loan_amount'] / max(1, input_data['income'])
-            collateral_ratio = input_data['property_value'] / max(1, input_data['loan_amount'])
-
-            st.write(f"**Debt-to-Income Ratio:** {debt_to_income:.1f}x")
-            st.write(f"**Collateral Coverage:** {collateral_ratio:.1%}")
-            st.write(f"**Credit Score:** {input_data['Credit_Score']} (FICO range: 300-850)")
-
-            # Risk indicators
-            risk_flags = []
-            if input_data['Credit_Score'] < 580:
-                risk_flags.append("Subprime credit score (<580)")
-            if debt_to_income > 5:
-                risk_flags.append("Extreme debt burden (>5x income)")
-            if collateral_ratio < 0.2:
-                risk_flags.append("Insufficient collateral (<20%)")
-            if input_data['loan_purpose'] == 'p4':
-                risk_flags.append("High-risk loan purpose (p4)")
-
-            if risk_flags:
-                st.warning("🚩 Risk flags detected:")
-                for flag in risk_flags:
-                    st.write(f"- {flag}")
-            else:
-                st.info("No strong risk factors identified")
-
-                # ======================================
-                # Model Diagnostics Section
-                # ======================================
-                #with st.expander("ℹ️ Model Diagnostics"):
-                #st.write("**If predictions seem incorrect:**")
-                #st.write("- The model may be under-trained")
-                #st.write("- Training data may lack high-risk examples")
-                #st.write("- Important risk features may be missing")
-
-                if probability[1] < 0.05:
-                    st.error("❗ Extremely low default probability")
-                    st.write("This suggests either:")
-                    st.write("- The applicant is genuinely low-risk")
-                    st.write("- The model isn't sensitive to risk factors")
+            # Optional: Show confidence interval or prediction range
+            # st.info(f"Estimated range: ${predicted_amount*0.9:,.2f} - ${predicted_amount*1.1:,.2f}")
 
         except Exception as e:
+            # Handle prediction errors gracefully
             st.error(f"Prediction failed: {str(e)}")
-            st.error("Please check your input values")
+            st.info("Please check your input values and try again")
 
 
 def Results_Interpretation_And_Conclusion_page():
-    """Provides business interpretation of results:
-        - Model performance summary
-        - Implementation recommendations
-        - Limitations and future improvements
-        - Team contribution details"""
-
     st.title("7. Results Interpretation and Conclusion")
-
     st.write("""
     ## Model Performance Summary
-
-    The Random Forest classifier has shown good performance in predicting loan defaults:
-    - High accuracy on both training and test sets
-    - Balanced precision and recall scores
-    - Important features align with financial domain knowledge
-
+    The Ridge Regression model predicts expected loan default amounts based on applicant features.
     ## Business Implications
-
-
-    - The model can help reduce financial losses by identifying high-risk applicants
-    - Can be used to adjust interest rates based on risk levels
-    - Helps standardize the loan approval process
-
+    - Helps assess financial risk quantitatively.
+    - Can be used to inform lending decisions and set loan limits.
     ## Limitations
-
-    - Model performance depends on data quality
-    - May need periodic retraining as economic conditions change
-    - Doesn't capture all qualitative factors in loan decisions
-
+    - Regression only captures relationships present in the training data.
+    - Model performance may vary with economic changes or unobserved factors.
     ## Future Improvements
-
-    - Experiment with other algorithms (XGBoost, Neural Networks)
-    - Incorporate more features (economic indicators, employment history)
-    - Develop a risk scoring system based on model probabilities
+    - Add more financial history, credit, or behavioral features.
+    - Use advanced regression or ensemble models for further gains.
     """)
 
-
-# Map sidebar names to functions
 pages = {
     "Home Page": Home_Page,
     "Data Import and Overview": Data_Import_and_Overview_page,
@@ -959,4 +695,3 @@ pages = {
 
 selection = st.sidebar.selectbox("Select Page", list(pages.keys()))
 pages[selection]()
-
