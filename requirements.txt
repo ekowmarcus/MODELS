@@ -6,4 +6,5 @@ scikit-learn
 pillow
 streamlit
 plotly
-scikit-learn==1.2.2
+
+
