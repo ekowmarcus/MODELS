@@ -605,10 +605,14 @@ def Interactive_Prediction_page():
         preprocessor = load_artifact("3_preprocessor.pkl")
         # Load original feature names and types
         original_features = load_artifact("2_column_types.pkl")
-    except:
+        st.success("Artifacts loaded successfully!")
+
+    except Exception as e:
         # User-friendly message if prerequisites not met
         st.warning("Please complete model training first")
+        st.error(f"Debug: {e}")
         return  # Exit function if artifacts not available
+
 
     # --- Input Form Section ---
     st.subheader("Enter Applicant Information")
