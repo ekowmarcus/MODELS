@@ -102,7 +102,7 @@ def Home_Page():
     """Render the home page with project overview and team information."""
 
     # LOGO
-    logo = Image.open("LDP.jpeg")
+    logo = Image.open("LDP.jpg")
 
     st.image(logo, caption="", width=300)
     st.title("Loan Default Prediction Web App")
@@ -117,18 +117,8 @@ def Home_Page():
 
         ---
 
-        ### What This App Covers:
-        - *Data Import and Exploration*
-        - *Cleaning, Encoding, and Preprocessing*
-        - *Feature Selection using Best Subset Selection*
-        - *Model Training with Ridge Regression*
-        - *Model Evaluation (RMSE, R², Cross-Validation)*
-        - *Interactive Prediction Interface*
-        - *Final Results Interpretation and Conclusion*
 
-        ---
-
-        ### How to Use This App
+        ### Instructions
         Use the sidebar to navigate through the project steps:
 
         1. Data Import and Overview – Explore the dataset. 
@@ -142,7 +132,7 @@ def Home_Page():
         ---
 
         *Developed by:* [Group 5 ]  
-        *Tool:* Python + Streamlit + Scikit-learn
+        *Tools:* Python, Streamlit, Scikit-learn, Pandas, Numpy, Matplotlib, Seaborn, Pillow & Pickle.
 
         """)
 
@@ -150,15 +140,15 @@ def Home_Page():
     # Members section
     st.markdown("### Team Members")
     team_members = [
-        ["Kingsley Sarfo", "22252461", "Project Coordinator", "https://loan-predictor-hbbz24vwfzaue2qx4hwcat.streamlit.app"],
-        ["Francisca Sarpong", "22255796", "Data Preprocessing", "https://kftalde5ypwd5a3qqejuvo.streamlit.app"],
-        ["George Owell", "22256146", "Model Evaluation", "https://loandefaultpredictionapp-utmbic9znd7uzqqhs9zgo6.streamlit.app"],
-        ["Barima Addo", "22254055", "UI Testing", "https://loandefaultapp-ky4yy9kmt6ehsq8jqdcgs2.streamlit.app"],
-        ["Marcus Akrobettoe", "11410687", "Feature Selection", "https://models-loan-default-prediction.streamlit.app"]
+        ["1","Kingsley Sarfo", "22252461", "Project Coordinator","https://loan-predictor-hbbz24vwfzaue2qx4hwcat.streamlit.app"],
+        ["2","Francisca Sarpong", "22255796", "Data Preprocessing","https://kftalde5ypwd5a3qqejuvo.streamlit.app"],
+        ["3","George Owell", "22256146", "Model Evaluation","https://loandefaultpredictionapp-utmbic9znd7uzqqhs9zgo6.streamlit.app"],
+        ["4","Barima Addo", "22254055", "UI Testing","https://loandefaultapp-ky4yy9kmt6ehsq8jqdcgs2.streamlit.app"],
+        ["5","Marcus Akrobettoe", "11410687", "Feature Selection","https://models-loan-default-prediction.streamlit.app"]
     ]
 
     df = pd.DataFrame(team_members,
-                      columns=["Name", "Student ID", "Role", "Deployment Link"])
+                      columns=["SN", "Name", "Student ID", "Role", "Deployment Link"])
 
     # Display as interactive table
     st.dataframe(df,
@@ -170,14 +160,6 @@ def Home_Page():
 
     # Project Overview Section
     st.markdown("""
-
-        ### Instructions:
-
-        1. Use the sidebar menu on the left to navigate between the pages.
-        2. Start from *"1. Data Upload and Overview"*.
-        3. Follow each step in sequence for best results.
-
-        ---
         ###  Dataset Information:
         - Source: [Kaggle - Loan Default Dataset](https://www.kaggle.com/datasets/yasserh/loan-default-dataset)
         - Target variable: loan_amount
@@ -205,7 +187,7 @@ def Data_Import_and_Overview_page():
     st.dataframe(df.head())
 
     # Data summary statistics
-    st.subheader("1. Summary Statistics")
+    st.subheader("Summary Statistics")
 
     # Basic stats
     col1, col2, col3 = st.columns(3)
@@ -605,14 +587,10 @@ def Interactive_Prediction_page():
         preprocessor = load_artifact("3_preprocessor.pkl")
         # Load original feature names and types
         original_features = load_artifact("2_column_types.pkl")
-        st.success("Artifacts loaded successfully!")
-
-    except Exception as e:
+    except:
         # User-friendly message if prerequisites not met
         st.warning("Please complete model training first")
-        st.error(f"Debug: {e}")
         return  # Exit function if artifacts not available
-
 
     # --- Input Form Section ---
     st.subheader("Enter Applicant Information")
@@ -672,20 +650,63 @@ def Interactive_Prediction_page():
 
 def Results_Interpretation_And_Conclusion_page():
     st.title("7. Results Interpretation and Conclusion")
-    st.write("""
-    ## Model Performance Summary
-    The Ridge Regression model predicts expected loan default amounts based on applicant features.
-    ## Business Implications
-    - Helps assess financial risk quantitatively.
-    - Can be used to inform lending decisions and set loan limits.
-    ## Limitations
-    - Regression only captures relationships present in the training data.
-    - Model performance may vary with economic changes or unobserved factors.
-    ## Future Improvements
-    - Add more financial history, credit, or behavioral features.
-    - Use advanced regression or ensemble models for further gains.
-    """)
+    # Load the model and predictions
+    try:
+        model = load_artifact("7_trained_model.pkl")
+        predictions_df = pd.read_csv(f"{DATA_DIR}/8_predictions.csv")
+    except:
+        st.warning("Please train the model first")
+        return
 
+    y_true = predictions_df['loan_amount']
+    y_pred = predictions_df['Predicted_Amount']
+
+    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+    r2 = r2_score(y_true, y_pred)
+    rmse_value = f"{rmse:.2f}"
+    r2_value = f"{r2:.4f}"
+
+    if hasattr(model, 'coef_'):
+        importance = pd.Series(
+            np.abs(model.coef_),
+            index=predictions_df.drop(
+                ['loan_amount', 'Predicted_Amount'],
+                axis=1).columns
+        )
+        top_features = importance.nlargest(5)
+        top_features_list = [f"{feat} ({imp:.2f})" for feat, imp in top_features.items()]
+        top_features_str = ", ".join(top_features_list)
+    else:
+        top_features_str = "N/A"
+
+    interpretation_md = f"""
+    ## Model Performance Insights
+
+    - The final Ridge Regression model achieved an RMSE of *{rmse_value}*, meaning that on average, predictions deviate from actual defaults by this amount.
+    - The R² score of *{r2_value}* indicates that the model explains approximately *{float(r2)*100:.1f}%* of the variation in loan default amounts.
+
+    ## Feature Insights
+
+    - The most important features for prediction were: {top_features_str}
+
+    ## Practical Impact
+
+    - This model can help banks identify high-risk loans, personalize loan limits, and automate risk assessment workflows.
+    - Outlier predictions (where model error is high) may reveal cases needing manual review.
+
+    ## Limitations
+
+    - The model’s accuracy depends on the quality and representativeness of the training data.
+    - It may not fully account for macroeconomic shifts, fraud, or abrupt life events impacting borrowers.
+
+    ## Future Work
+
+    - Explore ensemble models (e.g XGBoost) for potentially higher accuracy.
+    - Enhance interpretability using tools like SHAP.
+    - Update the model periodically to capture changing economic conditions and borrower behaviors.
+    """
+
+    st.markdown(interpretation_md)
 pages = {
     "Home Page": Home_Page,
     "Data Import and Overview": Data_Import_and_Overview_page,
