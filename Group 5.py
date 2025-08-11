@@ -228,22 +228,22 @@ def Data_Import_and_Overview_page():
     # Target distribution (loan amount)
     if 'loan_amount' in df.columns:
         st.markdown("**Loan Amount Distribution**")
-        fig, ax = plt.subplots(1, 2, figsize=(12, 5))
+        fig1, axes1 = plt.subplots(ncols=2, figsize=(12, 5))
 
-        # Histogram
-        sns.histplot(data=df, x='loan_amount', ax=ax[0], bins='auto', stat='count')
+    # NEW: no 'kde=True' in histplot; add KDE as separate layer
+    sns.histplot(data=df, x='loan_amount', ax=axes1[0], bins='auto', stat='count')
     try:
-        sns.kdeplot(data=df, x='loan_amount', ax=ax[0])  # NEW
+        sns.kdeplot(data=df, x='loan_amount', ax=axes1[0])
     except Exception:
-        pass  # NEW
-        ax[0].set_title('Loan Amount Distribution')
-        ax[0].set_xlabel('Loan Amount')
+        pass
+    axes1[0].set_title('Loan Amount Distribution')
+    axes1[0].set_xlabel('Loan Amount')
 
-        # Boxplot
-        sns.boxplot(x='loan_amount', data=df, ax=ax[1])
-        ax[1].set_title('Loan Amount Spread')
-        ax[1].set_xlabel('Loan Amount')
-        st.pyplot(fig)
+    sns.boxplot(data=df, x='loan_amount', ax=axes1[1])
+    axes1[1].set_title('Loan Amount Spread')
+    axes1[1].set_xlabel('Loan Amount')
+
+    st.pyplot(fig1)
 
     # Numerical distributions
     num_cols = df.select_dtypes(include=['int64', 'float64']).columns
@@ -254,22 +254,30 @@ def Data_Import_and_Overview_page():
                                       default=[col for col in ['income', 'Credit_Score', 'property_value'] if
                                                col in num_cols])
 
-        if selected_num:
-            fig, ax = plt.subplots(len(selected_num), 2, figsize=(14, 5 * len(selected_num)), squeeze=False)  # CHANGED
-            for i, col in enumerate(selected_num):
-                # Histogram
-                sns.histplot(data=df, x=col, ax=ax[i, 0], bins='auto', stat='count')  # CHANGED
-                ax[i, 0].set_title(f'{col} Distribution')
-                ax[i, 0].tick_params(axis='x', rotation=45)
+       if selected_num:
+        # NEW: keep axes 2-D even if only one feature is selected
+        fig2, axes2 = plt.subplots(
+            nrows=len(selected_num), ncols=2,
+            figsize=(14, 5 * len(selected_num)),
+            squeeze=False
+        )
+        for i, col in enumerate(selected_num):
+            # NEW: histplot without kde=; overlay KDE separately
+            sns.histplot(data=df, x=col, ax=axes2[i, 0], bins='auto', stat='count')
+            try:
+                sns.kdeplot(data=df, x=col, ax=axes2[i, 0])
+            except Exception:
+                pass
+            axes2[i, 0].set_title(f'{col} Distribution')
+            axes2[i, 0].tick_params(axis='x', rotation=45)
 
-                # Boxplot
-                sns.boxplot(x=df[col], ax=ax[i, 1])
-                ax[i, 1].set_title(f'{col} Boxplot')
-                ax[i, 1].tick_params(axis='x', rotation=45)
+            # Boxplot
+            sns.boxplot(x=df[col], ax=axes2[i, 1])
+            axes2[i, 1].set_title(f'{col} Boxplot')
+            axes2[i, 1].tick_params(axis='x', rotation=45)
 
-            plt.tight_layout()
-            st.pyplot(fig)
-
+        plt.tight_layout()
+        st.pyplot(fig2)
             # Scatterplots of numerical features vs loan amount
             if 'loan_amount' in df.columns:
                 st.markdown("**Relationships with Loan Amount**")
@@ -724,6 +732,7 @@ pages = {
 
 selection = st.sidebar.selectbox("Select Page", list(pages.keys()))
 pages[selection]()
+
 
 
 
