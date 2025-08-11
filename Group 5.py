@@ -285,31 +285,33 @@ def Data_Import_and_Overview_page():
         fig, ax = plt.subplots(1, 2, figsize=(14, 6))
 
                 # 1. Income vs Loan Amount
-                if 'income' in df.columns:
-                    sns.scatterplot(x='income', y='loan_amount', data=df, ax=ax[0])
-                    ax[0].set_title('Loan Amount vs Income')
-                    ax[0].set_xlabel('Income ()')
-                    ax[0].set_ylabel('Loan Amount')
-                else:
-                    sns.scatterplot(x=selected_num[0], y='loan_amount', data=df, ax=ax[0])
-                    ax[0].set_title(f'Loan Amount vs {selected_num[0]}')
-                    ax[0].set_xlabel(selected_num[0])
-                    ax[0].set_ylabel('Loan Amount')
+    if 'income' in df.columns:
+         sns.scatterplot(x='income', y='loan_amount', data=df, ax=ax[0])
+         ax[0].set_title('Loan Amount vs Income')
+         ax[0].set_xlabel('Income ()')
+         ax[0].set_ylabel('Loan Amount')
+        
+                   
+    else:
+        sns.scatterplot(x=selected_num[0], y='loan_amount', data=df, ax=ax[0])
+        ax[0].set_title(f'Loan Amount vs {selected_num[0]}')
+        ax[0].set_xlabel(selected_num[0])
+        ax[0].set_ylabel('Loan Amount')
 
                 # 2. Credit Score vs Loan Amount
-                if 'Credit_Score' in df.columns:
-                    sns.scatterplot(x='Credit_Score', y='loan_amount', data=df, ax=ax[1])
-                    ax[1].set_title('Loan Amount vs Credit Score')
-                    ax[1].set_xlabel('Credit Score')
-                    ax[1].set_ylabel('Loan Amount')
-                elif len(selected_num) > 1:
-                    sns.scatterplot(x=selected_num[1], y='loan_amount', data=df, ax=ax[1])
-                    ax[1].set_title(f'Loan Amount vs {selected_num[1]}')
-                    ax[1].set_xlabel(selected_num[1])
-                    ax[1].set_ylabel('Loan Amount')
+    if 'Credit_Score' in df.columns:
+        sns.scatterplot(x='Credit_Score', y='loan_amount', data=df, ax=ax[1])
+        ax[1].set_title('Loan Amount vs Credit Score')
+        ax[1].set_xlabel('Credit Score')
+        ax[1].set_ylabel('Loan Amount')
+    elif len(selected_num) > 1:
+         sns.scatterplot(x=selected_num[1], y='loan_amount', data=df, ax=ax[1])
+         ax[1].set_title(f'Loan Amount vs {selected_num[1]}')
+         ax[1].set_xlabel(selected_num[1])
+         ax[1].set_ylabel('Loan Amount')
 
-                plt.tight_layout()
-                st.pyplot(fig)
+         plt.tight_layout()
+         st.pyplot(fig)
 
     # Correlation matrix
     if len(num_cols) > 1 and 'loan_amount' in num_cols:
@@ -732,6 +734,7 @@ pages = {
 
 selection = st.sidebar.selectbox("Select Page", list(pages.keys()))
 pages[selection]()
+
 
 
 
