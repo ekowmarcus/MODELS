@@ -232,10 +232,10 @@ def Data_Import_and_Overview_page():
 
         # Histogram
         sns.histplot(data=df, x='loan_amount', ax=ax[0], bins='auto', stat='count')
-         try:  # NEW
-            sns.kdeplot(data=df, x='loan_amount', ax=ax[0])  # NEW
+         try:
+             sns.kdeplot(data=df, x='loan_amount', ax=ax[0])  # NEW
         except Exception:
-            pass  # NEW
+             pass  # NEW
         ax[0].set_title('Loan Amount Distribution')
         ax[0].set_xlabel('Loan Amount')
 
@@ -724,5 +724,6 @@ pages = {
 
 selection = st.sidebar.selectbox("Select Page", list(pages.keys()))
 pages[selection]()
+
 
 
