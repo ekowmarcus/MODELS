@@ -1,42 +1,89 @@
 
-# --- IM'PORT SECTION ---
-# Standard data science and visualization libraries
-import streamlit as st  # For building the web interface
-import pandas as pd  # For data manipulation
-import numpy as np  # For numerical ope
-import matplotlib.pyplot as plt  # For plotting
-import seaborn as sns  # For enhanced visualizations
-import pickle  # For serializing Python objects
-import os  # For file system operations
-from PIL import Image  # For image handling
-
-# Scikit-learn components for machine learning pipeline
-from sklearn.linear_model import Ridge  # Regularized linear regression model
-from sklearn.model_selection import cross_val_score, cross_validate  # Model evaluation
-from sklearn.metrics import mean_squared_error, r2_score  # Performance metrics
-from sklearn.preprocessing import StandardScaler, OneHotEncoder  # Feature preprocessing
-from sklearn.impute import SimpleImputer  # Handling missing values
-from sklearn.pipeline import Pipeline  # ML pipeline construction
-from sklearn.compose import ColumnTransformer  # Column-wise transformations
-from sklearn.feature_selection import SequentialFeatureSelector  # Feature selection
+# --- IMPORT SECTION ---
+import streamlit as st
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pickle
+import os
 import re
+from PIL import Image
+
+from sklearn.linear_model import Ridge
+from sklearn.model_selection import cross_val_score, cross_validate
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.feature_selection import SequentialFeatureSelector
 
 # --- CONFIGURATION ---
-DATA_DIR = "saved_data"   # Directory for storing processed data and artifacts
-os.makedirs(DATA_DIR, exist_ok=True)  # Create directory if it doesn't exist
+DATA_DIR = "saved_data"
+os.makedirs(DATA_DIR, exist_ok=True)
 
-def pretty_label(name: str) -> str:
-    """Make column names human-friendly for display only."""
-    s = re.sub(r'(?<!^)(?=[A-Z])', ' ', name)  # split CamelCase (Credit_Worthiness -> Credit _ Worthiness)
-    s = s.replace('_', ' ').strip()
-    # Keep common acronyms upper
-    keep_upper = {'ID', 'DTI', 'LTV', 'APR'}
-    words = []
-    for w in s.split():
-        words.append(w.upper() if w.upper() in keep_upper else w.capitalize())
-    return ' '.join(words)
+# ---- UI CONFIG ----
+st.set_page_config(
+    page_title="Loan Default Prediction",
+    page_icon="💳",
+    layout="wide",
+    menu_items={"Get Help": None, "Report a bug": None, "About": None},
+)
+
+# Global CSS for a cleaner aesthetic
+st.markdown("""
+<style>
+:root{
+  --primary:#0f4c81;
+  --bg:#f8fafc;
+  --card:#ffffff;
+  --text:#0f172a;
+  --muted:#64748b;
+}
+.main { background: var(--bg); }
+section[data-testid="stSidebar"] { background: #0f4c8110; }
+h1, h2, h3 { color: var(--text); }
+.stButton>button {
+  background: var(--primary); color: #fff; border: 0;
+  padding: .55rem 1rem; border-radius: 12px; font-weight: 600;
+  box-shadow: 0 6px 16px rgba(15,76,129,.18);
+}
+.stButton>button:hover{ filter: brightness(1.1); }
+[data-testid="stMetricValue"] { color: var(--text); }
+.dataframe tbody tr:hover { background:#0f4c810d; }
+.card{
+  background: var(--card); border-radius:16px; padding:16px;
+  box-shadow: 0 4px 18px rgba(2,6,23,.08); border:1px solid #e5e7eb;
+}
+.card h4{ margin:0 0 .25rem 0; color: var(--muted); font-weight:600; }
+.card .big{ font-size: 28px; font-weight: 800; color: var(--text); }
+.pill{
+  display:inline-block; padding:.2rem .6rem; border-radius:999px;
+  background:#0f4c8115; color: var(--primary); font-size:12px; font-weight:700;
+}
+hr { border:0; border-top:1px solid #e5e7eb; margin:1rem 0; }
+</style>
+""", unsafe_allow_html=True)
+
+def metric_card(title:str, value:str, subtext:str=""):
+    st.markdown(f"""
+    <div class="card">
+      <h4>{title}</h4>
+      <div class="big">{value}</div>
+      <div class="pill">{subtext}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # --- HELPER FUNCTIONS ---
+def pretty_label(name: str) -> str:
+    """Make column names human-friendly for display only."""
+    s = re.sub(r'(?<!^)(?=[A-Z])', ' ', name)
+    s = s.replace('_', ' ').strip()
+    keep_upper = {'ID','DTI','LTV','APR'}
+    words = [w.upper() if w.upper() in keep_upper else w.capitalize() for w in s.split()]
+    return ' '.join(words)
+
 def save_artifact(obj, filename):
     """Serialize and save Python objects to disk for later use.
 
@@ -44,10 +91,8 @@ def save_artifact(obj, filename):
             obj: Any Python object to be serialized
             filename: Name of the file to save to (within DATA_DIR)
         """
-
     with open(f"{DATA_DIR}/{filename}", 'wb') as f:
         pickle.dump(obj, f)
-
 
 def load_artifact(filename):
     """Load previously saved Python objects from disk.
@@ -63,43 +108,36 @@ def load_artifact(filename):
 @st.cache_data
 def load_data():
     df = pd.read_csv("Loan_Default.csv")
-    # Drop unnecessary columns
     df = df.drop(columns=['ID', 'dtir1', 'submission_of_application', 'year'], errors='ignore')
-    # Save raw data for reference
     df.to_csv(f"{DATA_DIR}/1_raw_data.csv", index=False)
     return df
 
 def create_preprocessor():
-    """Create and fit a preprocessing pipeline for the loan data.
-        """
+    """Create and fit a preprocessing pipeline for the loan data."""
     df = load_data()
     X = df.drop('loan_amount', axis=1)
 
-    # Identify numerical and categorical columns
     numerical_cols = X.select_dtypes(include=['int64', 'float64']).columns.tolist()
-    categorical_cols = X.select_dtypes( include=['object']).columns.tolist()
+    categorical_cols = X.select_dtypes(include=['object']).columns.tolist()
     save_artifact({'numerical': numerical_cols, 'categorical': categorical_cols},
                   "2_column_types.pkl")
 
-    # Numerical feature pipeline: impute missing values with median and standardize
     numerical_transformer = Pipeline(steps=[
         ('imputer', SimpleImputer(strategy='median')),
-        ('scaler', StandardScaler())])
-
-    # Categorical feature pipeline: impute missing values with mode and one-hot encode
+        ('scaler', StandardScaler())
+    ])
     categorical_transformer = Pipeline(steps=[
         ('imputer', SimpleImputer(strategy='most_frequent')),
-        ('onehot', OneHotEncoder(handle_unknown='ignore'))])
-
-    # Combine pipelines in ColumnTransformer
+        ('onehot', OneHotEncoder(handle_unknown='ignore'))
+    ])
     preprocessor = ColumnTransformer(
         transformers=[
             ('num', numerical_transformer, numerical_cols),
-            ('cat', categorical_transformer, categorical_cols)])
+            ('cat', categorical_transformer, categorical_cols)
+        ])
     preprocessor.fit(X)
     save_artifact(preprocessor, "3_preprocessor.pkl")
 
-    # Transform data and save processed version
     X_processed = preprocessor.transform(X)
     num_features = preprocessor.named_transformers_['num'].get_feature_names_out()
     cat_features = preprocessor.named_transformers_['cat'].named_steps['onehot'].get_feature_names_out()
@@ -109,266 +147,157 @@ def create_preprocessor():
     processed_df.to_csv(f"{DATA_DIR}/4_processed_data.csv", index=False)
     return preprocessor
 
-
 # --- STREAMLIT PAGES ---
 def Home_Page():
-    """Render the home page with project overview and team information."""
+    """Landing page with visual cards and team info."""
+    try:
+        logo = Image.open("LDP.jpeg")
+        st.image(logo, width=220)
+    except Exception:
+        st.markdown("### 💳 Loan Default Prediction")
 
-    # LOGO
-    logo = Image.open("LDP.jpeg")
+    st.markdown(
+        "Build, evaluate, and **predict loan default amounts** with a guided workflow. "
+        "Use the left sidebar to move through each step."
+    )
+    st.markdown("---")
 
-    st.image(logo, caption="", width=300)
-    st.title("Loan Default Prediction Web App")
-    st.markdown("""
-        ---
+    c1, c2, c3 = st.columns(3)
+    with c1: metric_card("Course", "Applied ML", "MSBA")
+    with c2: metric_card("Tech Stack", "Python + Streamlit", "scikit-learn • pandas")
+    with c3: metric_card("Model", "Ridge Regression", "Regularized")
 
-        ### Project Overview
-
-        This interactive web application was developed as part of an applied regression and machine learning course project. It simulates a real-world scenario where a data science team is tasked with building a system to *predict the probability of loan default* based on demographic and financial features.
-
-        Users can explore the dataset, follow the full machine learning workflow, and interact with the final model to generate real-time predictions.
-
-        ---
-
-
-        ### Instructions
-        Use the sidebar to navigate through the project steps:
-
-        1. Data Import and Overview – Explore the dataset. 
-        2. Data Preprocessing – Clean, impute, encode, and standardize
-        3. Feature Selection – Best subset based on Ridge
-        4. Model Training – Fit Ridge regression to selected features
-        5. Model Evaluation – RMSE, R², and k-Fold CV
-        6. Prediction – Enter values and predict default probability
-        7. Conclusion – Insights and limitations
-
-        ---
-
-        *Developed by:* [Group 5 ]  
-        *Tools:* Python, Streamlit, Scikit-learn, Pandas, Numpy, Matplotlib, Seaborn, Pillow & Pickle.
-
-        """)
-
-
-    # Members section
-    st.markdown("### Team Members")
+    st.markdown("### Team")
     team_members = [
-        ["1","Kingsley Sarfo", "22252461", "Project Coordinator","https://loan-predictor-hbbz24vwfzaue2qx4hwcat.streamlit.app"],
-        ["2","Francisca Sarpong", "22255796", "Data Preprocessing","https://kftalde5ypwd5a3qqejuvo.streamlit.app"],
-        ["3","George Owell", "22256146", "Model Evaluation","https://loandefaultpredictionapp-utmbic9znd7uzqqhs9zgo6.streamlit.app"],
-        ["4","Barima Addo", "22254055", "UI Testing","https://loandefaultapp-ky4yy9kmt6ehsq8jqdcgs2.streamlit.app"],
-        ["5","Marcus Akrobettoe", "11410687", "Feature Selection","https://models-loan-default-prediction.streamlit.app"]
+        ["1","Kingsley Sarfo", "22252461", "Project Coordinator", "https://loan-predictor-hbbz24vwfzaue2qx4hwcat.streamlit.app"],
+        ["2","Francisca Sarpong", "22255796", "Data Preprocessing", "https://kftalde5ypwd5a3qqejuvo.streamlit.app"],
+        ["3","George Owell", "22256146", "Model Evaluation", "https://loandefaultpredictionapp-utmbic9znd7uzqqhs9zgo6.streamlit.app"],
+        ["4","Barima Addo", "22254055", "UI Testing", "https://loandefaultapp-ky4yy9kmt6ehsq8jqdcgs2.streamlit.app"],
+        ["5","Marcus Akrobettoe", "11410687", "Feature Selection", "https://models-loan-default-prediction.streamlit.app"]
     ]
-
     df = pd.DataFrame(team_members,
                       columns=["SN", "Name", "Student ID", "Role", "Deployment Link"])
-
-    # Display as interactive table
     st.dataframe(df,
                  hide_index=True,
                  use_container_width=True,
-                 column_config={
-                     "Deployment Link": st.column_config.LinkColumn()
-                 })
-
-    # Project Overview Section
-    st.markdown("""
-        ###  Dataset Information:
-        - Source: [Kaggle - Loan Default Dataset](https://www.kaggle.com/datasets/yasserh/loan-default-dataset)
-        - Target variable: loan_amount
-        """)
+                 column_config={"Deployment Link": st.column_config.LinkColumn("Deployment")})
+    st.caption("Kaggle dataset • This app is for learning/demonstration purposes.")
 
 def Data_Import_and_Overview_page():
     """Page for data upload, exploration and visualization."""
-    st.title("1. Data Import and Overview")
+    st.title("1. Data Import & Overview")
 
-    # File uploader widget
     st.subheader("Upload Your Loan Data (CSV)")
-    uploaded_file = st.file_uploader("Upload your loan data CSV", type="csv")
+    uploaded_file = st.file_uploader("Upload CSV", type="csv", label_visibility="collapsed")
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
         df = df.drop(columns=['ID', 'dtir1', 'submission_of_application', 'year'], errors='ignore')
-        st.session_state['uploaded_file'] = uploaded_file
         st.session_state['df'] = df
-        st.success("File uploaded and loaded! Data will be used throughout the app.")
+        st.success("✅ File uploaded and loaded. This data will be used across the app.")
     elif 'df' in st.session_state:
         df = st.session_state['df']
     else:
-        st.warning("Please upload your data to use the app.")
+        st.info("Upload a dataset to continue.")
         return
 
-    st.dataframe(df.head())
+    # KPI Cards
+    k1, k2, k3 = st.columns(3)
+    with k1: metric_card("Total Records", f"{df.shape[0]:,}")
+    with k2: metric_card("Total Features", f"{df.shape[1]:,}")
+    with k3:
+        avg = df['loan_amount'].mean() if 'loan_amount' in df.columns else 0
+        metric_card("Average Loan Amount", f"${avg:,.0f}")
 
-    # Data summary statistics
-    st.subheader("Summary Statistics")
+    # Tabs
+    t1, t2, t3 = st.tabs(["🔎 Preview", "📊 Distributions", "🔗 Correlations"])
 
-    # Basic stats
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total Records", df.shape[0])
-    with col2:
-        st.metric("Total Features", df.shape[1])
-    with col3:
+    with t1:
+        st.dataframe(df.head(50), use_container_width=True, height=320)
+
+        st.markdown("#### Summaries")
+        colA, colB = st.columns(2)
+        with colA:
+            st.markdown("**Numerical Features**")
+            num_summary = df.describe().T
+            num_summary.index = [pretty_label(c) for c in num_summary.index]
+            st.dataframe(num_summary.style.format("{:.2f}"), use_container_width=True, height=300)
+        with colB:
+            cat_cols = df.select_dtypes(include=['object']).columns
+            st.markdown("**Categorical Features**")
+            if len(cat_cols) > 0:
+                cat_summary = pd.DataFrame({
+                    'Unique Values': df[cat_cols].nunique(),
+                    'Most Common': df[cat_cols].mode().iloc[0],
+                    'Missing Values': df[cat_cols].isnull().sum()
+                })
+                cat_summary.index = [pretty_label(c) for c in cat_summary.index]
+                st.dataframe(cat_summary, use_container_width=True, height=300)
+            else:
+                st.info("No categorical columns detected.")
+
+        st.markdown("**Missing Values**")
+        missing = df.isnull().sum().to_frame('Missing Values')
+        missing['Percentage'] = (missing['Missing Values']/len(df))*100
+        missing.index = [pretty_label(c) for c in missing.index]
+        st.dataframe(missing.style.format({'Percentage':'{:.2f}%'}), use_container_width=True)
+
+    with t2:
+        st.markdown("#### Target: Loan Amount")
         if 'loan_amount' in df.columns:
-            st.metric("Average Loan Amount", f"{df['loan_amount'].mean():,.2f}")
+            # ensure numeric
+            df['loan_amount'] = pd.to_numeric(df['loan_amount'], errors='coerce')
+            fig1, (ax1, ax2) = plt.subplots(ncols=2, figsize=(12,5))
+            sns.histplot(df['loan_amount'], ax=ax1, bins='auto')
+            try: sns.kdeplot(df['loan_amount'], ax=ax1)
+            except Exception: pass
+            ax1.set_title('Loan Amount Distribution'); ax1.set_xlabel('Loan Amount')
+            sns.boxplot(x=df['loan_amount'], ax=ax2)
+            ax2.set_title('Loan Amount Spread'); ax2.set_xlabel('Loan Amount')
+            st.pyplot(fig1)
 
-    # Numerical features summary
-    st.markdown("**Numerical Features Summary**")
-    num_summary = df.describe().T
-    num_summary.index = [pretty_label(c) for c in num_summary.index]   # NEW
-    st.dataframe(num_summary.style.format("{:.2f}"))
+        num_cols = df.select_dtypes(include=['int64','float64']).columns.tolist()
+        if len(num_cols) > 0:
+            st.markdown("#### Numerical Features")
+            chosen = st.multiselect("Pick features to visualize", num_cols,
+                                    default=[c for c in ['income','Credit_Score','property_value'] if c in num_cols])
+            if chosen:
+                fig2, axes2 = plt.subplots(nrows=len(chosen), ncols=2,
+                                           figsize=(14, 5*len(chosen)), squeeze=False)
+                for i, col in enumerate(chosen):
+                    sns.histplot(df[col], ax=axes2[i,0], bins='auto')
+                    try: sns.kdeplot(df[col], ax=axes2[i,0])
+                    except Exception: pass
+                    axes2[i,0].set_title(f'{col} Distribution')
+                    sns.boxplot(x=df[col], ax=axes2[i,1])
+                    axes2[i,1].set_title(f'{col} Boxplot')
+                st.pyplot(fig2)
 
-    # Categorical features summary
-    cat_cols = df.select_dtypes(include=['object']).columns
-    if len(cat_cols) > 0:
-        st.markdown("**Categorical Features Summary**")
-        cat_summary = pd.DataFrame({
-            'Unique Values': df[cat_cols].nunique(),
-            'Most Common': df[cat_cols].mode().iloc[0],
-            'Missing Values': df[cat_cols].isnull().sum()
-        })
-        cat_summary_disp = cat_summary.copy()                               # NEW
-        cat_summary_disp.index = [pretty_label(c) for c in cat_summary.index]  # NEW
-        st.dataframe(cat_summary_disp)
+    with t3:
+        num_cols = df.select_dtypes(include=['int64','float64']).columns
+        if len(num_cols)>1 and 'loan_amount' in num_cols:
+            corr = df[num_cols].corr()
+            top = corr['loan_amount'].sort_values(key=abs, ascending=False)
+            fig, ax = plt.subplots(figsize=(10,7))
+            sns.heatmap(corr, cmap='coolwarm', center=0, ax=ax)
+            ax.set_title("Correlation Matrix (Numeric)"); st.pyplot(fig)
 
-    # Missing values analysis
-    st.markdown("**Missing Values Analysis**")
-    missing = df.isnull().sum().to_frame('Missing Values')
-    missing['Percentage'] = (missing['Missing Values'] / len(df)) * 100
-    missing_disp = missing.copy()
-    missing_disp.index = [pretty_label(c) for c in missing.index]   # <-- display-friendly names
-    st.dataframe(missing_disp.style.format({'Percentage': '{:.2f}%'}))
-
-    # ========================
-    # 2. Data Visualizations
-    # ========================
-    st.subheader("Data Visualizations")
-
-    # Target distribution (loan amount)
-    if 'loan_amount' in df.columns:
-        st.markdown("**Loan Amount Distribution**")
-        fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-
-        # Histogram
-        sns.histplot(x='loan_amount', data=df, kde=True, ax=ax[0])
-        ax[0].set_title('Loan Amount Distribution')
-        ax[0].set_xlabel('Loan Amount')
-
-        # Boxplot
-        sns.boxplot(x='loan_amount', data=df, ax=ax[1])
-        ax[1].set_title('Loan Amount Spread')
-        ax[1].set_xlabel('Loan Amount')
-        st.pyplot(fig)
-
-    # Numerical distributions
-    num_cols = df.select_dtypes(include=['int64', 'float64']).columns
-    if len(num_cols) > 0:
-        st.markdown("**Numerical Features Distribution**")
-        selected_num = st.multiselect("Select numerical features to visualize",
-                                      num_cols,
-                                      default=[col for col in ['income', 'Credit_Score', 'property_value'] if
-                                               col in num_cols])
-
-        if selected_num:
-            fig, ax = plt.subplots(len(selected_num), 2, figsize=(14, 5 * len(selected_num)))
-            for i, col in enumerate(selected_num):
-                # Histogram
-                sns.histplot(df[col], kde=True, ax=ax[i, 0])
-                ax[i, 0].set_title(f'{col} Distribution')
-                ax[i, 0].tick_params(axis='x', rotation=45)
-
-                # Boxplot
-                sns.boxplot(x=df[col], ax=ax[i, 1])
-                ax[i, 1].set_title(f'{col} Boxplot')
-                ax[i, 1].tick_params(axis='x', rotation=45)
-
-            plt.tight_layout()
-            st.pyplot(fig)
-
-            # Scatterplots of numerical features vs loan amount
-            if 'loan_amount' in df.columns:
-                st.markdown("**Relationships with Loan Amount**")
-
-                fig, ax = plt.subplots(1, 2, figsize=(14, 6))
-
-                # 1. Income vs Loan Amount
-                if 'income' in df.columns:
-                    sns.scatterplot(x='income', y='loan_amount', data=df, ax=ax[0])
-                    ax[0].set_title('Loan Amount vs Income')
-                    ax[0].set_xlabel('Income ()')
-                    ax[0].set_ylabel('Loan Amount')
-                else:
-                    sns.scatterplot(x=selected_num[0], y='loan_amount', data=df, ax=ax[0])
-                    ax[0].set_title(f'Loan Amount vs {selected_num[0]}')
-                    ax[0].set_xlabel(selected_num[0])
-                    ax[0].set_ylabel('Loan Amount')
-
-                # 2. Credit Score vs Loan Amount
-                if 'Credit_Score' in df.columns:
-                    sns.scatterplot(x='Credit_Score', y='loan_amount', data=df, ax=ax[1])
-                    ax[1].set_title('Loan Amount vs Credit Score')
-                    ax[1].set_xlabel('Credit Score')
-                    ax[1].set_ylabel('Loan Amount')
-                elif len(selected_num) > 1:
-                    sns.scatterplot(x=selected_num[1], y='loan_amount', data=df, ax=ax[1])
-                    ax[1].set_title(f'Loan Amount vs {selected_num[1]}')
-                    ax[1].set_xlabel(selected_num[1])
-                    ax[1].set_ylabel('Loan Amount')
-
-                plt.tight_layout()
-                st.pyplot(fig)
-
-    # Correlation matrix
-    if len(num_cols) > 1 and 'loan_amount' in num_cols:
-        st.markdown("**Correlation Matrix (with Loan Amount)**")
-        corr_matrix = df[num_cols].corr()
-
-        # Highlight correlations with loan amount
-        loan_corrs = corr_matrix['loan_amount'].sort_values(key=abs, ascending=False)
-
-        fig, ax = plt.subplots(figsize=(10, 8))
-        sns.heatmap(corr_matrix, annot=True, fmt=".2f", cmap='coolwarm',
-                    center=0, ax=ax)
-        ax.set_title("Feature Correlations with Loan Amount")
-        st.pyplot(fig)
-
-        # Top correlations with loan amount
-        st.markdown("**Top Correlations with Loan Amount**")
-        loan_corrs_disp = loan_corrs.copy()                                 # NEW
-        loan_corrs_disp.index = [pretty_label(c) for c in loan_corrs.index] # NEW
-        st.dataframe(loan_corrs_disp.to_frame('Correlation').iloc[1:11])  # Exclude self-correlation
-
-    # Categorical visualizations vs loan amount
-    if len(cat_cols) > 0 and 'loan_amount' in df.columns:
-        st.markdown("**Categorical Features vs Loan Amount**")
-        selected_cat = st.selectbox("Select categorical feature", cat_cols)
-
-        fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-
-        # Countplot
-        sns.countplot(y=selected_cat, data=df, ax=ax[0],
-                      order=df[selected_cat].value_counts().index)
-        ax[0].set_title(f'{selected_cat} Distribution')
-
-        # Boxplot of loan amount by category
-        sns.boxplot(y=selected_cat, x='loan_amount', data=df,
-                    ax=ax[1], order=df[selected_cat].value_counts().index)
-        ax[1].set_title(f'Loan Amount by {selected_cat}')
-        ax[1].set_xlabel('Loan Amount')
-
-        st.pyplot(fig)
+            st.markdown("**Top Correlations with Loan Amount**")
+            top_disp = top.copy()
+            top_disp.index = [pretty_label(c) for c in top_disp.index]
+            st.dataframe(top_disp.to_frame('Correlation').iloc[1:11], use_container_width=True)
 
 def Data_Preprocessing_page():
-    """Manages the data preprocessing workflow:
-            - Executes the preprocessing pipeline
-            - Displays sample processed data"""
-
+    """Manages the data preprocessing workflow."""
     st.title("2. Data Preprocessing")
     if st.button("Run Data Preprocessing"):
-        processed_df = pd.read_csv(f"{DATA_DIR}/4_processed_data.csv")
-        st.subheader("Processed Data Sample")
-        st.dataframe(processed_df.head())
-        st.success("Preprocessing completed and saved!")
+        try:
+            create_preprocessor()
+            processed_df = pd.read_csv(f"{DATA_DIR}/4_processed_data.csv")
+            st.subheader("Processed Data Sample")
+            st.dataframe(processed_df.head(), use_container_width=True)
+            st.success("Preprocessing completed and saved!")
+        except Exception as e:
+            st.error(f"Preprocessing failed: {e}")
 
 def Feature_Selection_page():
     """Page for feature selection using sequential forward selection."""
@@ -381,7 +310,6 @@ def Feature_Selection_page():
         st.warning("Please complete preprocessing first")
         return
 
-    # Feature selection interface
     st.subheader("Best Subset Selection (Ridge Regression)")
     max_features = st.slider("Maximum features to evaluate", 1, 15, 5)
     scoring_metric = st.selectbox("Selection metric", ['neg_root_mean_squared_error', 'r2'])
@@ -412,7 +340,7 @@ def Feature_Selection_page():
                 'Mean': [abs(cv_results['test_neg_root_mean_squared_error'].mean()), cv_results['test_r2'].mean()],
                 'Std': [cv_results['test_neg_root_mean_squared_error'].std(), cv_results['test_r2'].std()]
             }, index=['RMSE', 'R2 Score'])
-            st.dataframe(metrics_df.style.format("{:.4f}"))
+            st.dataframe(metrics_df.style.format("{:.4f}"), use_container_width=True)
             estimator.fit(X[selected_features], y)
             if hasattr(estimator, 'coef_'):
                 importance = pd.Series(np.abs(estimator.coef_),
@@ -422,256 +350,45 @@ def Feature_Selection_page():
                 ax.set_title("Feature Importance (Absolute Coefficients)")
                 st.pyplot(fig)
 
-
 def Model_Selection_And_Training_page():
-    """Page for Ridge Regression model selection, cross-validation, and final training.
-
-    This function handles:
-    - Loading preprocessed data
-    - Setting model hyperparameters
-    - Running cross-validation
-    - Training and saving the final model
-    """
-
-    # Page title
+    """Page for Ridge Regression model selection, cross-validation, and final training."""
     st.title("4. Model Selection and Training")
-
-    # Data loading with error handling
     try:
-        # Load processed data from previous step
         processed_df = pd.read_csv(f"{DATA_DIR}/4_processed_data.csv")
-        # Separate features (X) and target (y)
         X = processed_df.drop('loan_amount', axis=1)
         y = processed_df['loan_amount']
     except:
-        # User-friendly error message if preprocessing isn't complete
         st.warning("Please complete preprocessing first")
-        return  # Exit the function early
+        return
 
-    # --- Model Parameter Configuration ---
     st.subheader("Ridge Regression Parameters")
-
-    # Interactive alpha parameter slider
-    # Default value of 1.0 is a reasonable starting point for Ridge
-    alpha = st.slider("Ridge regularization strength (alpha)",
-                      0.01,  # Minimum value
-                      10.0,  # Maximum value
-                      1.0)  # Default value
-
-    # Initialize Ridge Regression model with selected alpha
+    alpha = st.slider("Ridge regularization strength (alpha)", 0.01, 10.0, 1.0)
     model = Ridge(alpha=alpha)
 
-    # --- Cross-Validation Section ---
     if st.button("Run Cross-Validation"):
-        # Perform 5-fold cross-validation
-        # Using negative RMSE (sklearn convention - lower is better)
-        rmse_scores = cross_val_score(model, X, y,
-                                      cv=5,
-                                      scoring='neg_root_mean_squared_error')
-
-        # Also calculate R² scores
-        r2_scores = cross_val_score(model, X, y,
-                                    cv=5,
-                                    scoring='r2')
-
-        # Display performance metrics with standard deviation
+        rmse_scores = cross_val_score(model, X, y, cv=5, scoring='neg_root_mean_squared_error')
+        r2_scores = cross_val_score(model, X, y, cv=5, scoring='r2')
         st.write(f"Mean RMSE: {abs(rmse_scores.mean()):.2f} (±{rmse_scores.std():.2f})")
         st.write(f"Mean R²: {r2_scores.mean():.4f} (±{r2_scores.std():.4f})")
-
-        # Save cross-validation results for later use
         save_artifact({
             'rmse_scores': rmse_scores,
             'r2_scores': r2_scores,
-            'params': model.get_params()  # Store model configuration
+            'params': model.get_params()
         }, "6_cv_results.pkl")
 
-    # --- Final Model Training ---
     if st.button("Train Final Model"):
-        # Fit model on entire dataset
         model.fit(X, y)
-
-        # Save the trained model for later use
         save_artifact(model, "7_trained_model.pkl")
-
-        # Generate and store predictions
         y_pred = model.predict(X)
         processed_df['Predicted_Amount'] = y_pred
         processed_df.to_csv(f"{DATA_DIR}/8_predictions.csv", index=False)
-
-        # Store model and features in session state for other pages
         st.session_state['model'] = model
         st.session_state['features'] = X.columns.tolist()
-
-        # Success notification
         st.success("Model trained and saved!")
 
-
 def Model_Evaluation_page():
-    """
-    Displays comprehensive evaluation metrics and visualizations for the trained Ridge Regression model.
-
-    This page:
-    1. Loads the trained model and predictions
-    2. Calculates key performance metrics (RMSE, R²)
-    3. Shows actual vs predicted values plot
-    4. Visualizes feature importance
-    """
-
+    """Displays evaluation metrics and visualizations for the trained model."""
     st.title("5. Model Evaluation")
-
-    # Load model artifacts with error handling
-    try:
-        # Load the serialized model
-        model = load_artifact("7_trained_model.pkl")
-        # Load the saved predictions
-        predictions_df = pd.read_csv(f"{DATA_DIR}/8_predictions.csv")
-    except:
-        # User-friendly message if model hasn't been trained
-        st.warning("Please train the model first")
-        return  # Exit function early if artifacts missing
-
-    # Extract true and predicted values
-    y_true = predictions_df['loan_amount']  # Actual loan amounts
-    y_pred = predictions_df['Predicted_Amount']  # Model predictions
-
-    # --- Performance Metrics Section ---
-    st.subheader("Model Performance")
-
-    # Calculate Root Mean Squared Error (lower is better)
-    rmse = np.sqrt(mean_squared_error(y_true, y_pred))
-    # Calculate R-squared score (0-1, higher is better)
-    r2 = r2_score(y_true, y_pred)
-
-    # Display metrics in clean format
-    st.metric("RMSE", f"{rmse:.2f}")  # Formatted to 2 decimal places
-    st.metric("R²", f"{r2:.4f}")  # Formatted to 4 decimal places
-
-    # --- Actual vs Predicted Visualization ---
-    st.subheader("Actual vs Predicted Plot")
-
-    # Create scatter plot of predictions
-    fig, ax = plt.subplots()
-    # Scatter plot with transparency
-    ax.scatter(y_true, y_pred, alpha=0.3)
-    # Add perfect prediction line (y=x)
-    ax.plot([y_true.min(), y_true.max()],
-            [y_true.min(), y_true.max()],
-            'r--')  # Red dashed line
-    # Axis labels
-    ax.set_xlabel("Actual Loan Amount")
-    ax.set_ylabel("Predicted Loan Amount")
-    # Display plot in Streamlit
-    st.pyplot(fig)
-
-    # --- Feature Importance Analysis ---
-    st.subheader("Feature Importance")
-
-    # Check if model has coefficients (Ridge regression does)
-    if hasattr(model, 'coef_'):
-        # Create absolute value of coefficients for importance
-        importance = pd.Series(
-            np.abs(model.coef_),
-            index=predictions_df.drop(
-                ['loan_amount', 'Predicted_Amount'],
-                axis=1).columns
-        )
-
-        # Get top 5 most important features
-        top_features = importance.nlargest(5)
-
-        # Create horizontal bar plot
-        fig, ax = plt.subplots()
-        top_features.plot(kind='barh', ax=ax)
-
-        # Display plot
-        st.pyplot(fig)
-
-
-def Interactive_Prediction_page():
-    """
-    Interactive page for making real-time loan default predictions using the trained model.
-
-    This page:
-    1. Loads required artifacts (model, preprocessor, feature list)
-    2. Provides input form for user to enter applicant data
-    3. Processes inputs and generates predictions
-    4. Displays prediction results with formatting
-    """
-
-    st.title("6. Interactive Prediction")
-
-    # --- Load Required Artifacts with Error Handling ---
-    try:
-        # Load trained Ridge Regression model
-        model = load_artifact("7_trained_model.pkl")
-        # Load preprocessor for feature transformation
-        preprocessor = load_artifact("3_preprocessor.pkl")
-        # Load original feature names and types
-        original_features = load_artifact("2_column_types.pkl")
-    except:
-        # User-friendly message if prerequisites not met
-        st.warning("Please complete model training first")
-        return  # Exit function if artifacts not available
-
-    # --- Input Form Section ---
-    st.subheader("Enter Applicant Information")
-    input_data = {}  # Dictionary to store user inputs
-
-    # Create two columns for better form layout
-    col1, col2 = st.columns(2)
-
-    # Numerical Features Input
-    with col1:
-        st.markdown("**Numerical Features**")
-        for feature in original_features['numerical']:
-            # Create number input for each numerical feature
-            input_data[feature] = st.number_input(
-                label=f"{feature}",
-                value=0.0,  # Default value
-                step=0.01,  # Increment step
-                format="%.2f"  # Display format
-            )
-
-    # Categorical Features Input
-    with col2:
-        st.markdown("**Categorical Features**")
-        for feature in original_features['categorical']:
-            # Create text input for each categorical feature
-            input_data[feature] = st.text_input(
-                label=f"{feature}",
-                value="",  # Empty default
-                help=f"Enter {feature} value"
-            )
-
-    # --- Prediction Section ---
-    if st.button("Predict Default Amount", type="primary"):
-        # Create DataFrame from user inputs (single row)
-        df_template = pd.DataFrame([input_data])
-
-        try:
-            # Preprocess inputs using saved pipeline
-            X_processed = preprocessor.transform(df_template)
-
-            # Generate prediction
-            predicted_amount = model.predict(X_processed)[0]  # Get single prediction
-
-            # Display formatted result
-            st.success(
-                f"Predicted Loan Default Amount: ${predicted_amount:,.2f}",
-            )
-
-            # Optional: Show confidence interval or prediction range
-            # st.info(f"Estimated range: ${predicted_amount*0.9:,.2f} - ${predicted_amount*1.1:,.2f}")
-
-        except Exception as e:
-            # Handle prediction errors gracefully
-            st.error(f"Prediction failed: {str(e)}")
-            st.info("Please check your input values and try again")
-
-
-def Results_Interpretation_And_Conclusion_page():
-    st.title("7. Results Interpretation and Conclusion")
-    # Load the model and predictions
     try:
         model = load_artifact("7_trained_model.pkl")
         predictions_df = pd.read_csv(f"{DATA_DIR}/8_predictions.csv")
@@ -682,52 +399,103 @@ def Results_Interpretation_And_Conclusion_page():
     y_true = predictions_df['loan_amount']
     y_pred = predictions_df['Predicted_Amount']
 
+    st.subheader("Model Performance")
+    c1, c2 = st.columns(2)
+    with c1:
+        rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+        st.metric("RMSE", f"{rmse:.2f}")
+    with c2:
+        r2 = r2_score(y_true, y_pred)
+        st.metric("R²", f"{r2:.4f}")
+
+    st.subheader("Actual vs Predicted")
+    fig, ax = plt.subplots()
+    ax.scatter(y_true, y_pred, alpha=0.3)
+    ax.plot([y_true.min(), y_true.max()], [y_true.min(), y_true.max()], 'r--')
+    ax.set_xlabel("Actual Loan Amount"); ax.set_ylabel("Predicted Loan Amount")
+    st.pyplot(fig)
+
+    st.subheader("Feature Importance")
+    if hasattr(model, 'coef_'):
+        importance = pd.Series(np.abs(model.coef_), index=predictions_df.drop(['loan_amount','Predicted_Amount'], axis=1).columns)
+        top_features = importance.nlargest(5)
+        fig, ax = plt.subplots()
+        top_features.plot(kind='barh', ax=ax)
+        ax.set_title("Top Feature Importance (|coef|)")
+        st.pyplot(fig)
+
+def Interactive_Prediction_page():
+    """Interactive page for making real-time predictions."""
+    st.title("6. Interactive Prediction")
+    try:
+        model = load_artifact("7_trained_model.pkl")
+        preprocessor = load_artifact("3_preprocessor.pkl")
+        original_features = load_artifact("2_column_types.pkl")
+    except:
+        st.warning("Please complete model training first")
+        return
+
+    st.subheader("Enter Applicant Information")
+    input_data = {}
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**Numerical Features**")
+        for feature in original_features['numerical']:
+            input_data[feature] = st.number_input(label=f"{feature}", value=0.0, step=0.01, format="%.2f")
+    with col2:
+        st.markdown("**Categorical Features**")
+        for feature in original_features['categorical']:
+            input_data[feature] = st.text_input(label=f"{feature}", value="", help=f"Enter {feature} value")
+
+    if st.button("Predict Default Amount", type="primary"):
+        df_template = pd.DataFrame([input_data])
+        try:
+            X_processed = preprocessor.transform(df_template)
+            predicted_amount = model.predict(X_processed)[0]
+            st.success(f"Predicted Loan Default Amount: ${predicted_amount:,.2f}")
+        except Exception as e:
+            st.error(f"Prediction failed: {str(e)}")
+            st.info("Please check your input values and try again")
+
+def Results_Interpretation_And_Conclusion_page():
+    st.title("7. Results & Conclusion")
+    try:
+        model = load_artifact("7_trained_model.pkl")
+        predictions_df = pd.read_csv(f"{DATA_DIR}/8_predictions.csv")
+    except:
+        st.warning("Please train the model first")
+        return
+
+    y_true = predictions_df['loan_amount']
+    y_pred = predictions_df['Predicted_Amount']
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
     r2 = r2_score(y_true, y_pred)
-    rmse_value = f"{rmse:.2f}"
-    r2_value = f"{r2:.4f}"
 
     if hasattr(model, 'coef_'):
-        importance = pd.Series(
-            np.abs(model.coef_),
-            index=predictions_df.drop(
-                ['loan_amount', 'Predicted_Amount'],
-                axis=1).columns
-        )
+        importance = pd.Series(np.abs(model.coef_), index=predictions_df.drop(['loan_amount','Predicted_Amount'], axis=1).columns)
         top_features = importance.nlargest(5)
-        top_features_list = [f"{feat} ({imp:.2f})" for feat, imp in top_features.items()]
-        top_features_str = ", ".join(top_features_list)
+        feats = ", ".join([f"{k} ({v:.2f})" for k,v in top_features.items()])
     else:
-        top_features_str = "N/A"
+        feats = "N/A"
 
-    interpretation_md = f"""
-    ## Model Performance Insights
+    st.markdown(f"""
+    ### Model Performance
+    - **RMSE:** {rmse:.2f}
+    - **R²:** {r2:.4f}
 
-    - The final Ridge Regression model achieved an RMSE of *{rmse_value}*, meaning that on average, predictions deviate from actual defaults by this amount.
-    - The R² score of *{r2_value}* indicates that the model explains approximately *{float(r2)*100:.1f}%* of the variation in loan default amounts.
+    ### Feature Insights
+    - Most influential features: {feats}
 
-    ## Feature Insights
+    ### Business Impact
+    - Use predictions to prioritize high-risk applicants and right-size loan limits.
+    - Automate risk flags for manual review.
 
-    - The most important features for prediction were: {top_features_str}
+    ### Caveats & Next Steps
+    - Skew/outliers can affect linear models; consider log-transform/winsorizing.
+    - Try Regularization search (RidgeCV), or Elastic Net, and add robust validation.
+    """)
 
-    ## Practical Impact
-
-    - This model can help banks identify high-risk loans, personalize loan limits, and automate risk assessment workflows.
-    - Outlier predictions (where model error is high) may reveal cases needing manual review.
-
-    ## Limitations
-
-    - The model’s accuracy depends on the quality and representativeness of the training data.
-    - It may not fully account for macroeconomic shifts, fraud, or abrupt life events impacting borrowers.
-
-    ## Future Work
-
-    - Explore ensemble models (e.g XGBoost) for potentially higher accuracy.
-    - Enhance interpretability using tools like SHAP.
-    - Update the model periodically to capture changing economic conditions and borrower behaviors.
-    """
-
-    st.markdown(interpretation_md)
+# --- ROUTING ---
 pages = {
     "Home Page": Home_Page,
     "Data Import and Overview": Data_Import_and_Overview_page,
@@ -739,6 +507,5 @@ pages = {
     "Result Interpretation and Conclusion": Results_Interpretation_And_Conclusion_page,
 }
 
-selection = st.sidebar.selectbox("Select Page", list(pages.keys()))
+selection = st.sidebar.selectbox("📚 Navigate", list(pages.keys()))
 pages[selection]()
-
