@@ -19,10 +19,22 @@ from sklearn.impute import SimpleImputer  # Handling missing values
 from sklearn.pipeline import Pipeline  # ML pipeline construction
 from sklearn.compose import ColumnTransformer  # Column-wise transformations
 from sklearn.feature_selection import SequentialFeatureSelector  # Feature selection
+import re
 
 # --- CONFIGURATION ---
 DATA_DIR = "saved_data"   # Directory for storing processed data and artifacts
 os.makedirs(DATA_DIR, exist_ok=True)  # Create directory if it doesn't exist
+
+def pretty_label(name: str) -> str:
+    """Make column names human-friendly for display only."""
+    s = re.sub(r'(?<!^)(?=[A-Z])', ' ', name)  # split CamelCase (Credit_Worthiness -> Credit _ Worthiness)
+    s = s.replace('_', ' ').strip()
+    # Keep common acronyms upper
+    keep_upper = {'ID', 'DTI', 'LTV', 'APR'}
+    words = []
+    for w in s.split():
+        words.append(w.upper() if w.upper() in keep_upper else w.capitalize())
+    return ' '.join(words)
 
 # --- HELPER FUNCTIONS ---
 def save_artifact(obj, filename):
@@ -202,7 +214,9 @@ def Data_Import_and_Overview_page():
 
     # Numerical features summary
     st.markdown("**Numerical Features Summary**")
-    st.dataframe(df.describe().T.style.format("{:.2f}"))
+    num_summary = df.describe().T
+    num_summary.index = [pretty_label(c) for c in num_summary.index]   # NEW
+    st.dataframe(num_summary.style.format("{:.2f}"))
 
     # Categorical features summary
     cat_cols = df.select_dtypes(include=['object']).columns
@@ -213,13 +227,17 @@ def Data_Import_and_Overview_page():
             'Most Common': df[cat_cols].mode().iloc[0],
             'Missing Values': df[cat_cols].isnull().sum()
         })
-        st.dataframe(cat_summary)
+        cat_summary_disp = cat_summary.copy()                               # NEW
+        cat_summary_disp.index = [pretty_label(c) for c in cat_summary.index]  # NEW
+        st.dataframe(cat_summary_disp)
 
     # Missing values analysis
     st.markdown("**Missing Values Analysis**")
     missing = df.isnull().sum().to_frame('Missing Values')
     missing['Percentage'] = (missing['Missing Values'] / len(df)) * 100
-    st.dataframe(missing.style.format({'Percentage': '{:.2f}%'}))
+    missing_disp = missing.copy()
+    missing_disp.index = [pretty_label(c) for c in missing.index]   # <-- display-friendly names
+    st.dataframe(missing_disp.style.format({'Percentage': '{:.2f}%'}))
 
     # ========================
     # 2. Data Visualizations
@@ -316,7 +334,9 @@ def Data_Import_and_Overview_page():
 
         # Top correlations with loan amount
         st.markdown("**Top Correlations with Loan Amount**")
-        st.dataframe(loan_corrs.to_frame('Correlation').iloc[1:11])  # Exclude self-correlation
+        loan_corrs_disp = loan_corrs.copy()                                 # NEW
+        loan_corrs_disp.index = [pretty_label(c) for c in loan_corrs.index] # NEW
+        st.dataframe(loan_corrs_disp.to_frame('Correlation').iloc[1:11])  # Exclude self-correlation
 
     # Categorical visualizations vs loan amount
     if len(cat_cols) > 0 and 'loan_amount' in df.columns:
@@ -721,3 +741,4 @@ pages = {
 
 selection = st.sidebar.selectbox("Select Page", list(pages.keys()))
 pages[selection]()
+
