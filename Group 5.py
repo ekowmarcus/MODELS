@@ -231,7 +231,11 @@ def Data_Import_and_Overview_page():
         fig, ax = plt.subplots(1, 2, figsize=(12, 5))
 
         # Histogram
-        sns.histplot(x='loan_amount', data=df, kde=True, ax=ax[0])
+        sns.histplot(data=df, x='loan_amount', ax=ax[0], bins='auto', stat='count')
+         try:  # NEW
+            sns.kdeplot(data=df, x='loan_amount', ax=ax[0])  # NEW
+        except Exception:
+            pass  # NEW
         ax[0].set_title('Loan Amount Distribution')
         ax[0].set_xlabel('Loan Amount')
 
@@ -251,10 +255,10 @@ def Data_Import_and_Overview_page():
                                                col in num_cols])
 
         if selected_num:
-            fig, ax = plt.subplots(len(selected_num), 2, figsize=(14, 5 * len(selected_num)))
+            fig, ax = plt.subplots(len(selected_num), 2, figsize=(14, 5 * len(selected_num)), squeeze=False)  # CHANGED
             for i, col in enumerate(selected_num):
                 # Histogram
-                sns.histplot(df[col], kde=True, ax=ax[i, 0])
+                sns.histplot(data=df, x=col, ax=ax[i, 0], bins='auto', stat='count')  # CHANGED
                 ax[i, 0].set_title(f'{col} Distribution')
                 ax[i, 0].tick_params(axis='x', rotation=45)
 
@@ -720,4 +724,5 @@ pages = {
 
 selection = st.sidebar.selectbox("Select Page", list(pages.keys()))
 pages[selection]()
+
 
