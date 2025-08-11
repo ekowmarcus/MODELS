@@ -280,10 +280,9 @@ def Data_Import_and_Overview_page():
         st.pyplot(fig2)
         
             # Scatterplots of numerical features vs loan amount
-         if 'loan_amount' in df.columns:
-             st.markdown("**Relationships with Loan Amount**")
-
-                fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+    if 'loan_amount' in df.columns:
+        st.markdown("**Relationships with Loan Amount**")
+        fig, ax = plt.subplots(1, 2, figsize=(14, 6))
 
                 # 1. Income vs Loan Amount
                 if 'income' in df.columns:
@@ -733,6 +732,7 @@ pages = {
 
 selection = st.sidebar.selectbox("Select Page", list(pages.keys()))
 pages[selection]()
+
 
 
 
