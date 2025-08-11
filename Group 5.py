@@ -36,6 +36,14 @@ def pretty_label(name: str) -> str:
         words.append(w.upper() if w.upper() in keep_upper else w.capitalize())
     return ' '.join(words)
 
+def show_table(df, *, pretty_index=False, **kwargs):
+    """Display a DataFrame with human-friendly column names (UI only)."""
+    d = df.copy()
+    d.columns = [pretty_label(c) for c in d.columns]
+    if pretty_index:
+        d.index = [pretty_label(str(i)) for i in d.index]
+    st.dataframe(d, **kwargs)
+
 # --- HELPER FUNCTIONS ---
 def save_artifact(obj, filename):
     """Serialize and save Python objects to disk for later use.
@@ -197,7 +205,7 @@ def Data_Import_and_Overview_page():
         st.warning("Please upload your data to use the app.")
         return
 
-    st.dataframe(df.head())
+    show_table(df.head(50), use_container_width=True, height=320)
 
     # Data summary statistics
     st.subheader("Summary Statistics")
@@ -215,8 +223,7 @@ def Data_Import_and_Overview_page():
     # Numerical features summary
     st.markdown("**Numerical Features Summary**")
     num_summary = df.describe().T
-    num_summary.index = [pretty_label(c) for c in num_summary.index]   # NEW
-    st.dataframe(num_summary.style.format("{:.2f}"))
+    show_table(num_summary, pretty_index=True, use_container_width=True, height=300)
 
     # Categorical features summary
     cat_cols = df.select_dtypes(include=['object']).columns
@@ -228,8 +235,7 @@ def Data_Import_and_Overview_page():
             'Missing Values': df[cat_cols].isnull().sum()
         })
         cat_summary_disp = cat_summary.copy()                               # NEW
-        cat_summary_disp.index = [pretty_label(c) for c in cat_summary.index]  # NEW
-        st.dataframe(cat_summary_disp)
+        show_table(cat_summary, pretty_index=True, use_container_width=True, height=300)
 
     # Missing values analysis
     st.markdown("**Missing Values Analysis**")
@@ -367,7 +373,7 @@ def Data_Preprocessing_page():
     if st.button("Run Data Preprocessing"):
         processed_df = pd.read_csv(f"{DATA_DIR}/4_processed_data.csv")
         st.subheader("Processed Data Sample")
-        st.dataframe(processed_df.head())
+        show_table(processed_df.head(), use_container_width=True)
         st.success("Preprocessing completed and saved!")
 
 def Feature_Selection_page():
@@ -625,28 +631,48 @@ def Interactive_Prediction_page():
         st.markdown("**Numerical Features**")
         for feature in original_features['numerical']:
             # Create number input for each numerical feature
-            input_data[feature] = st.number_input(
-                label=f"{feature}",
-                value=0.0,  # Default value
-                step=0.01,  # Increment step
-                format="%.2f"  # Display format
+            input_data[feature] = st.text_input(
+                label=pretty_label(feature),  # 👈 display only
+                value="",
+                help=f"Enter {pretty_label(feature)}",
+                key=f"cat_{feature}"
             )
 
     # Categorical Features Input
     with col2:
         st.markdown("**Categorical Features**")
         for feature in original_features['categorical']:
-            # Create text input for each categorical feature
             input_data[feature] = st.text_input(
-                label=f"{feature}",
-                value="",  # Empty default
-                help=f"Enter {feature} value"
+                label=pretty_label(feature),  # <-- nice label (no underscores)
+                value="",
+                help=f"Enter {pretty_label(feature)}",
+                key=f"cat_{feature}"
             )
 
     # --- Prediction Section ---
     if st.button("Predict Default Amount", type="primary"):
         # Create DataFrame from user inputs (single row)
         df_template = pd.DataFrame([input_data])
+
+        # 1) Turn blank strings into NaN everywhere
+        df_template.replace('', np.nan, inplace=True)
+
+        # 2) Force numeric columns to numeric (bad strings -> NaN)
+        for col in original_features['numerical']:
+            if col in df_template.columns:
+                df_template[col] = pd.to_numeric(df_template[col], errors='coerce')
+
+        # 3) Align columns to what the preprocessor was fitted on
+        if hasattr(preprocessor, "feature_names_in_"):
+            expected_cols = list(preprocessor.feature_names_in_)
+        else:
+            expected_cols = original_features['numerical'] + original_features['categorical']
+
+        for c in expected_cols:
+            if c not in df_template.columns:
+                df_template[c] = np.nan  # add any missing columns
+
+        df_template = df_template[expected_cols]  # exact order for the transformer
 
         try:
             # Preprocess inputs using saved pipeline
