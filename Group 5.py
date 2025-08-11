@@ -254,7 +254,7 @@ def Data_Import_and_Overview_page():
                                       default=[col for col in ['income', 'Credit_Score', 'property_value'] if
                                                col in num_cols])
 
-       if selected_num:
+    if selected_num:
         # NEW: keep axes 2-D even if only one feature is selected
         fig2, axes2 = plt.subplots(
             nrows=len(selected_num), ncols=2,
@@ -732,6 +732,7 @@ pages = {
 
 selection = st.sidebar.selectbox("Select Page", list(pages.keys()))
 pages[selection]()
+
 
 
 
