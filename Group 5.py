@@ -1,8 +1,9 @@
-# --- IMPORT SECTION ---
+
+# --- IM'PORT SECTION ---
 # Standard data science and visualization libraries
 import streamlit as st  # For building the web interface
 import pandas as pd  # For data manipulation
-import numpy as np  # For numerical operations
+import numpy as np  # For numerical ope
 import matplotlib.pyplot as plt  # For plotting
 import seaborn as sns  # For enhanced visualizations
 import pickle  # For serializing Python objects
@@ -228,22 +229,18 @@ def Data_Import_and_Overview_page():
     # Target distribution (loan amount)
     if 'loan_amount' in df.columns:
         st.markdown("**Loan Amount Distribution**")
-        fig1, axes1 = plt.subplots(ncols=2, figsize=(12, 5))
+        fig, ax = plt.subplots(1, 2, figsize=(12, 5))
 
-    # NEW: no 'kde=True' in histplot; add KDE as separate layer
-    sns.histplot(data=df, x='loan_amount', ax=axes1[0], bins='auto', stat='count')
-    try:
-        sns.kdeplot(data=df, x='loan_amount', ax=axes1[0])
-    except Exception:
-        pass
-    axes1[0].set_title('Loan Amount Distribution')
-    axes1[0].set_xlabel('Loan Amount')
+        # Histogram
+        sns.histplot(x='loan_amount', data=df, kde=True, ax=ax[0])
+        ax[0].set_title('Loan Amount Distribution')
+        ax[0].set_xlabel('Loan Amount')
 
-    sns.boxplot(data=df, x='loan_amount', ax=axes1[1])
-    axes1[1].set_title('Loan Amount Spread')
-    axes1[1].set_xlabel('Loan Amount')
-
-    st.pyplot(fig1)
+        # Boxplot
+        sns.boxplot(x='loan_amount', data=df, ax=ax[1])
+        ax[1].set_title('Loan Amount Spread')
+        ax[1].set_xlabel('Loan Amount')
+        st.pyplot(fig)
 
     # Numerical distributions
     num_cols = df.select_dtypes(include=['int64', 'float64']).columns
@@ -254,64 +251,54 @@ def Data_Import_and_Overview_page():
                                       default=[col for col in ['income', 'Credit_Score', 'property_value'] if
                                                col in num_cols])
 
-    if selected_num:
-        # NEW: keep axes 2-D even if only one feature is selected
-        fig2, axes2 = plt.subplots(
-            nrows=len(selected_num), ncols=2,
-            figsize=(14, 5 * len(selected_num)),
-            squeeze=False
-        )
-        for i, col in enumerate(selected_num):
-            # NEW: histplot without kde=; overlay KDE separately
-            sns.histplot(data=df, x=col, ax=axes2[i, 0], bins='auto', stat='count')
-            try:
-                sns.kdeplot(data=df, x=col, ax=axes2[i, 0])
-            except Exception:
-                pass
-            axes2[i, 0].set_title(f'{col} Distribution')
-            axes2[i, 0].tick_params(axis='x', rotation=45)
+        if selected_num:
+            fig, ax = plt.subplots(len(selected_num), 2, figsize=(14, 5 * len(selected_num)))
+            for i, col in enumerate(selected_num):
+                # Histogram
+                sns.histplot(df[col], kde=True, ax=ax[i, 0])
+                ax[i, 0].set_title(f'{col} Distribution')
+                ax[i, 0].tick_params(axis='x', rotation=45)
 
-            # Boxplot
-            sns.boxplot(x=df[col], ax=axes2[i, 1])
-            axes2[i, 1].set_title(f'{col} Boxplot')
-            axes2[i, 1].tick_params(axis='x', rotation=45)
+                # Boxplot
+                sns.boxplot(x=df[col], ax=ax[i, 1])
+                ax[i, 1].set_title(f'{col} Boxplot')
+                ax[i, 1].tick_params(axis='x', rotation=45)
 
-        plt.tight_layout()
-        st.pyplot(fig2)
-        
+            plt.tight_layout()
+            st.pyplot(fig)
+
             # Scatterplots of numerical features vs loan amount
-    if 'loan_amount' in df.columns:
-        st.markdown("**Relationships with Loan Amount**")
-        fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+            if 'loan_amount' in df.columns:
+                st.markdown("**Relationships with Loan Amount**")
+
+                fig, ax = plt.subplots(1, 2, figsize=(14, 6))
 
                 # 1. Income vs Loan Amount
-    if 'income' in df.columns:
-         sns.scatterplot(x='income', y='loan_amount', data=df, ax=ax[0])
-         ax[0].set_title('Loan Amount vs Income')
-         ax[0].set_xlabel('Income ()')
-         ax[0].set_ylabel('Loan Amount')
-        
-                   
-    else:
-        sns.scatterplot(x=selected_num[0], y='loan_amount', data=df, ax=ax[0])
-        ax[0].set_title(f'Loan Amount vs {selected_num[0]}')
-        ax[0].set_xlabel(selected_num[0])
-        ax[0].set_ylabel('Loan Amount')
+                if 'income' in df.columns:
+                    sns.scatterplot(x='income', y='loan_amount', data=df, ax=ax[0])
+                    ax[0].set_title('Loan Amount vs Income')
+                    ax[0].set_xlabel('Income ()')
+                    ax[0].set_ylabel('Loan Amount')
+                else:
+                    sns.scatterplot(x=selected_num[0], y='loan_amount', data=df, ax=ax[0])
+                    ax[0].set_title(f'Loan Amount vs {selected_num[0]}')
+                    ax[0].set_xlabel(selected_num[0])
+                    ax[0].set_ylabel('Loan Amount')
 
                 # 2. Credit Score vs Loan Amount
-    if 'Credit_Score' in df.columns:
-        sns.scatterplot(x='Credit_Score', y='loan_amount', data=df, ax=ax[1])
-        ax[1].set_title('Loan Amount vs Credit Score')
-        ax[1].set_xlabel('Credit Score')
-        ax[1].set_ylabel('Loan Amount')
-    elif len(selected_num) > 1:
-         sns.scatterplot(x=selected_num[1], y='loan_amount', data=df, ax=ax[1])
-         ax[1].set_title(f'Loan Amount vs {selected_num[1]}')
-         ax[1].set_xlabel(selected_num[1])
-         ax[1].set_ylabel('Loan Amount')
+                if 'Credit_Score' in df.columns:
+                    sns.scatterplot(x='Credit_Score', y='loan_amount', data=df, ax=ax[1])
+                    ax[1].set_title('Loan Amount vs Credit Score')
+                    ax[1].set_xlabel('Credit Score')
+                    ax[1].set_ylabel('Loan Amount')
+                elif len(selected_num) > 1:
+                    sns.scatterplot(x=selected_num[1], y='loan_amount', data=df, ax=ax[1])
+                    ax[1].set_title(f'Loan Amount vs {selected_num[1]}')
+                    ax[1].set_xlabel(selected_num[1])
+                    ax[1].set_ylabel('Loan Amount')
 
-         plt.tight_layout()
-         st.pyplot(fig)
+                plt.tight_layout()
+                st.pyplot(fig)
 
     # Correlation matrix
     if len(num_cols) > 1 and 'loan_amount' in num_cols:
@@ -734,13 +721,3 @@ pages = {
 
 selection = st.sidebar.selectbox("Select Page", list(pages.keys()))
 pages[selection]()
-
-
-
-
-
-
-
-
-
-
