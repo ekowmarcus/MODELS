@@ -373,18 +373,28 @@ def Interactive_Prediction_page():
     st.subheader("Enter Applicant Information")
     input_data = {}
     col1, col2 = st.columns(2)
+    # Numerical Features Input
     with col1:
         st.markdown("**Numerical Features**")
-        for f in original_features['numerical']:
-            input_data[f] = st.number_input(
-            label=pretty_label(f), value=0.0, step=0.01, format="%.2f",
-            key=f"num_{f}") 
+        for feature in original_features['numerical']:
+            # Create number input for each numerical feature
+            input_data[feature] = st.number_input(
+                label=f"{feature}",
+                value=0.0,  # Default value
+                step=0.01,  # Increment step
+                format="%.2f"  # Display format
+            )
+
+    # Categorical Features Input
     with col2:
         st.markdown("**Categorical Features**")
-        for f in original_features['numerical']:
-            input_data[f] = st.text_input(
-            label=pretty_label(f), value="",
-            help=f"Enter {pretty_label(f)}", key=f"cat_{f}")
+        for feature in original_features['categorical']:
+            # Create text input for each categorical feature
+            input_data[feature] = st.text_input(
+                label=f"{feature}",
+                value="",  # Empty default
+                help=f"Enter {feature} value"
+            )
 
     if st.button("Predict Default Amount", type="primary"):
         df_template = pd.DataFrame([input_data]).replace('', np.nan)
@@ -448,6 +458,7 @@ pages = {
 
 selection = st.sidebar.selectbox("📚 Navigate", list(pages.keys()))
 pages[selection]()
+
 
 
 
