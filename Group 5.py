@@ -384,7 +384,7 @@ def Interactive_Prediction_page():
         for f in original_features['numerical']:
             input_data[f] = st.text_input(
             label=pretty_label(f), value="",
-            help=f"Enter {pretty_label(f)}", key=f"cat_{f}"
+            help=f"Enter {pretty_label(f)}", key=f"cat_{f}")
 
     if st.button("Predict Default Amount", type="primary"):
         df_template = pd.DataFrame([input_data]).replace('', np.nan)
@@ -448,6 +448,7 @@ pages = {
 
 selection = st.sidebar.selectbox("📚 Navigate", list(pages.keys()))
 pages[selection]()
+
 
 
 
